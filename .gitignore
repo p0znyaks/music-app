@@ -1,0 +1,41 @@
+# Environment - NEVER commit real secrets
+.env
+.env.*
+!.env.example
+
+# Certificates & Keys - generate on server
+*.pem
+*.key
+*.crt
+*.pfx
+
+# Node modules
+backend/node_modules/
+frontend/app/node_modules/
+
+# Build outputs
+backend/dist/
+frontend/app/dist/
+frontend/app/.angular/
+
+# IDE
+.cursor/
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Audio cache
+audio_cache/
+
+# Certs - copy from backend to nginx/certs on server
+nginx/certs/
+
+# Pycache
+backend/scripts/__pycache__/

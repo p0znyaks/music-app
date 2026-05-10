@@ -1,0 +1,32 @@
+.app-shell {
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+.main-area {
+  margin-left: 240px;
+  min-height: 100vh;
+  background: var(--bg);
+  padding-top: 24px;
+  padding-bottom: 24px;
+}
+
+.main-area.main-area--with-player {
+  padding-bottom: 112px;
+}
+
+.global-toast {
+  position: fixed;
+  bottom: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  padding: 10px 18px;
+  border-radius: 8px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  font-size: 14px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}

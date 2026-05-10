@@ -1,0 +1,115 @@
+:root {
+  --bg: #0a0a0a;
+  --bg-card: #141414;
+  --bg-hover: #1c1c1c;
+  --accent: #ffffff;
+  --accent-dim: #a0a0a0;
+  --danger: #ff4444;
+  --border: #2a2a2a;
+
+  --text: var(--accent);
+
+  /* Semi-transparent overlays used in “chips/tags” UI. */
+  --overlay-chip-bg: rgba(255, 255, 255, 0.06);
+  --overlay-chip-border: rgba(255, 255, 255, 0.1);
+  --overlay-chip-border-strong: rgba(255, 255, 255, 0.14);
+  --overlay-chip-border-mid: rgba(255, 255, 255, 0.12);
+  --overlay-panel-bg: rgba(255, 255, 255, 0.03);
+  --overlay-panel-border: rgba(255, 255, 255, 0.06);
+  --overlay-panel-bg-strong: rgba(255, 255, 255, 0.09);
+
+  --scrim-bg: rgba(0, 0, 0, 0.42);
+  --bar-knob-shadow: rgba(0, 0, 0, 0.45);
+}
+
+[data-theme='light'] {
+  --bg: #f6f7fb;
+  --bg-card: #ffffff;
+  --bg-hover: #eef1f7;
+  --accent: #1d2433;
+  --accent-dim: #556079;
+  --danger: #d53b3b;
+  --border: #d7ddeb;
+
+  --text: var(--accent);
+
+  --overlay-chip-bg: rgba(0, 0, 0, 0.06);
+  --overlay-chip-border: rgba(0, 0, 0, 0.1);
+  --overlay-chip-border-strong: rgba(0, 0, 0, 0.14);
+  --overlay-chip-border-mid: rgba(0, 0, 0, 0.12);
+  --overlay-panel-bg: rgba(0, 0, 0, 0.03);
+  --overlay-panel-border: rgba(0, 0, 0, 0.06);
+  --overlay-panel-bg-strong: rgba(0, 0, 0, 0.09);
+
+  --scrim-bg: rgba(0, 0, 0, 0.2);
+  --bar-knob-shadow: rgba(0, 0, 0, 0.25);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+  min-height: 100%;
+}
+
+body {
+  font-family: system-ui, 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  min-height: 100dvh;
+  color: var(--accent);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+html {
+  background: var(--bg);
+}
+
+app-root {
+  display: block;
+  min-height: 100dvh;
+  background: var(--bg);
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+  transition: color 0.2s ease, opacity 0.2s ease;
+}
+
+* {
+  transition-property: background-color, border-color, color, opacity, transform, box-shadow;
+  transition-duration: 0.2s;
+  transition-timing-function: ease;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: #3a3a3a;
+}

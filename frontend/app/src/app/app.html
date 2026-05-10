@@ -1,0 +1,15 @@
+@if (toast.message(); as msg) {
+  <div class="global-toast" role="status">{{ msg }}</div>
+}
+
+@if (user() && !isClipRoute()) {
+  <div class="app-shell">
+    <app-navbar />
+    <div class="main-area" [class.main-area--with-player]="!!playerTrack()">
+      <router-outlet />
+    </div>
+    <app-player />
+  </div>
+} @else {
+  <router-outlet />
+}
