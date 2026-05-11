@@ -192,7 +192,6 @@ export class HistoryComponent {
       title: row.title,
       artist: row.artist,
       thumbnailUrl: row.thumbnailUrl ?? undefined,
-      duration: normalizeDurationSeconds(row.duration) ?? undefined,
     };
   }
 

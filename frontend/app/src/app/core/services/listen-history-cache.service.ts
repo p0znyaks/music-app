@@ -27,9 +27,17 @@ export class ListenHistoryCacheService {
       return;
     }
 
+    const key = this.getStorageKey();
+    if (!key) {
+      return;
+    }
+
+    const prev = this.readRaw(key);
+    const existingIdx = prev.findIndex((r) => r.trackId === trackId);
+    
     const nowIso = new Date().toISOString();
     const nextRow: CachedListenHistoryRow = {
-      id: this.localIdFromIso(nowIso),
+      id: existingIdx >= 0 ? prev[existingIdx]!.id : this.localIdFromIso(nowIso),
       trackId,
       title,
       artist,
@@ -38,13 +46,8 @@ export class ListenHistoryCacheService {
       listenedAt: nowIso,
     };
 
-    const key = this.getStorageKey();
-    if (!key) {
-      return;
-    }
-
-    const prev = this.readRaw(key);
-    const next = [nextRow, ...prev]
+    const withoutOld = existingIdx >= 0 ? [...prev.slice(0, existingIdx), ...prev.slice(existingIdx + 1)] : prev;
+    const next = [nextRow, ...withoutOld]
       .filter((r) => this.isValid(r))
       .sort((a, b) => new Date(b.listenedAt).getTime() - new Date(a.listenedAt).getTime())
       .slice(0, this.maxItems);
@@ -66,16 +69,21 @@ export class ListenHistoryCacheService {
 
   private mergeRows(primary: CachedListenHistoryRow[], secondary: CachedListenHistoryRow[]): CachedListenHistoryRow[] {
     const map = new Map<string, CachedListenHistoryRow>();
+    
     for (const row of [...primary, ...secondary]) {
       if (!this.isValid(row)) {
         continue;
       }
-      const ts = new Date(row.listenedAt).getTime();
-      const minuteBucket = Number.isFinite(ts) ? Math.floor(ts / 60000) : row.listenedAt;
-      const dedupeKey = `${row.trackId}|${minuteBucket}`;
-      const existing = map.get(dedupeKey);
-      if (!existing || new Date(existing.listenedAt).getTime() < ts) {
-        map.set(dedupeKey, row);
+      
+      const existing = map.get(row.trackId);
+      if (!existing) {
+        map.set(row.trackId, row);
+      } else {
+        const existingTs = new Date(existing.listenedAt).getTime();
+        const rowTs = new Date(row.listenedAt).getTime();
+        if (rowTs > existingTs) {
+          map.set(row.trackId, row);
+        }
       }
     }
 
