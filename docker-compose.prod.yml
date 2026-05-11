@@ -28,6 +28,7 @@ services:
       - app_network
     volumes:
       - audio_cache:/app/audio_cache
+      - ./cookies.txt:/app/cookies.txt:ro
 
   nginx:
     build:
