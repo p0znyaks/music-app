@@ -6,11 +6,11 @@ import {
   ListenHistoryCacheService,
   type CachedListenHistoryRow,
 } from '../../core/services/listen-history-cache.service';
-import { normalizeDurationSeconds } from '../../shared/utils/duration.util';
+import { PlayerService, type PlayerTrack } from '../../core/services/player.service';
+import { AppTrack } from '../../shared/models/track.model';
 import { TrackCardComponent } from '../../shared/components/track-card/track-card.component';
 import { TranslatePipe } from '../../shared/pipes/t.pipe';
 import { AppSettingsService } from '../../core/services/app-settings.service';
-import { AppTrack } from '../../shared/models/track.model';
 
 interface HistoryRow {
   id: number;
@@ -58,7 +58,7 @@ interface HistoryGroup {
                 <h2>{{ group.title }}</h2>
                 <div class="group">
                   @for (row of group.rows; track row.id) {
-                    <app-track-card [track]="toTrack(row)" [showDuration]="false" />
+                    <app-track-card [track]="toTrack(row)" [queue]="queueTracks()" />
                   }
                 </div>
               </section>
@@ -159,6 +159,7 @@ export class HistoryComponent {
 
   readonly filteredRows = computed(() => this.applyQueryFilter(this.rows(), this.query()));
   readonly groupedRows = computed<HistoryGroup[]>(() => this.buildGroups(this.filteredRows()));
+  readonly queueTracks = computed<PlayerTrack[]>(() => this.rows().map((row) => this.toPlayerTrack(row)));
 
   constructor() {
     this.api.get<CachedListenHistoryRow[]>('history').subscribe({
@@ -179,7 +180,15 @@ export class HistoryComponent {
       title: row.title,
       artist: row.artist,
       thumbnailUrl: row.thumbnailUrl,
-      duration: normalizeDurationSeconds(row.duration) ?? undefined,
+    };
+  }
+
+  private toPlayerTrack(row: HistoryRow): PlayerTrack {
+    return {
+      trackId: row.trackId,
+      title: row.title,
+      artist: row.artist,
+      thumbnailUrl: row.thumbnailUrl ?? undefined,
     };
   }
 
@@ -197,7 +206,7 @@ export class HistoryComponent {
   }
 
   private buildGroups(rows: HistoryRow[]): HistoryGroup[] {
-    const uniqueRows = this.dedupeLatestPerTrackInDay(rows);
+    const uniqueRows = this.dedupeByTrackId(rows);
     const grouped = new Map<string, HistoryRow[]>();
 
     for (const row of uniqueRows) {
@@ -217,29 +226,24 @@ export class HistoryComponent {
       .map(([title, groupRows]) => ({ title, rows: groupRows }));
   }
 
-  private dedupeLatestPerTrackInDay(rows: HistoryRow[]): HistoryRow[] {
-    const sorted = [...rows].sort(
-      (a, b) => new Date(b.listenedAt).getTime() - new Date(a.listenedAt).getTime(),
-    );
-    const seen = new Set<string>();
-    const result: HistoryRow[] = [];
-
-    for (const row of sorted) {
-      const listenedAt = new Date(row.listenedAt);
-      if (Number.isNaN(listenedAt.getTime())) {
-        continue;
+  private dedupeByTrackId(rows: HistoryRow[]): HistoryRow[] {
+    const map = new Map<string, HistoryRow>();
+    
+    for (const row of rows) {
+      const existing = map.get(row.trackId);
+      if (!existing) {
+        map.set(row.trackId, row);
+      } else {
+        const existingTs = new Date(existing.listenedAt).getTime();
+        const rowTs = new Date(row.listenedAt).getTime();
+        if (rowTs > existingTs) {
+          map.set(row.trackId, row);
+        }
       }
-
-      const key = `${this.toDateKey(listenedAt)}|${row.trackId}`;
-      if (seen.has(key)) {
-        continue;
-      }
-
-      seen.add(key);
-      result.push(row);
     }
 
-    return result;
+    return Array.from(map.values())
+      .sort((a, b) => new Date(b.listenedAt).getTime() - new Date(a.listenedAt).getTime());
   }
 
   private getPeriodTitle(date: Date): string {
