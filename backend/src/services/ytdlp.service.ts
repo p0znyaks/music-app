@@ -2,6 +2,7 @@ import { spawn } from 'child_process';
 import { redisGetSWR } from './cache-swr';
 import { getPythonPool } from './python-pool';
 import { getRedis } from './redis';
+import { ytdlpRateLimiter } from './ytdlp-rate-limiter';
 
 function envInt(name: string, fallback: number): number {
   const raw = process.env[name];
@@ -24,7 +25,7 @@ export interface SearchResult {
   title: string;
   artist: string;
   thumbnailUrl: string;
-  duration: number;
+  duration: number | string;
   /** YouTube channel id (UC…), если yt-dlp отдал в результате поиска. */
   channelId?: string;
 }
@@ -95,10 +96,27 @@ function ytdlpBinary(): string {
   return process.env.YTDLP_PATH?.trim() || 'yt-dlp';
 }
 
+function ytdlpCookieFlags(): string[] {
+  const browser = process.env.YTDLP_COOKIES_BROWSER?.trim();
+  if (!browser) {
+    const cookiesFile = process.env.YTDLP_COOKIES_FILE?.trim();
+    if (cookiesFile) {
+      return ['--cookies', cookiesFile];
+    }
+    return [];
+  }
+  const configPath = process.env.YTDLP_BROWSER_CONFIG_PATH?.trim();
+  if (configPath) {
+    return ['--cookies-from-browser', browser, configPath];
+  }
+  return ['--cookies-from-browser', browser];
+}
+
 function runYtdlp(args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
     const bin = ytdlpBinary();
-    const proc = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const allArgs = [...ytdlpCookieFlags(), ...args];
+    const proc = spawn(bin, allArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
     proc.stdout.setEncoding('utf8');
@@ -459,43 +477,54 @@ async function resolveChannelFromHint(
   if (!trimmedName) {
     return null;
   }
-  const stdout = await runYtdlpFlat(`ytsearch15:${trimmedName}`, 15);
-  const rows = parseJsonLines(stdout);
-  const qn = normText(stripTopicSuffix(trimmedName));
-  let best: { ch: string; name: string; thumb: string } | null = null;
-  for (const e of rows) {
-    const ch = pickChannelId(e);
-    if (!ch || !isYoutubeChannelId(ch)) {
-      continue;
+  const operation = 'resolveChannel';
+  await ytdlpRateLimiter.enter(operation);
+  try {
+    const stdout = await runYtdlpFlat(`ytsearch15:${trimmedName}`, 15);
+    const rows = parseJsonLines(stdout);
+    const qn = normText(stripTopicSuffix(trimmedName));
+    let best: { ch: string; name: string; thumb: string } | null = null;
+    for (const e of rows) {
+      const ch = pickChannelId(e);
+      if (!ch || !isYoutubeChannelId(ch)) {
+        continue;
+      }
+      const art = normText(stripTopicSuffix(pickArtist(e)));
+      if (!art) {
+        continue;
+      }
+      if (art === qn || art.includes(qn) || significantTokens(trimmedName).every((t) => art.includes(t))) {
+        best = {
+          ch,
+          name: stripTopicSuffix(pickArtist(e)) || trimmedName,
+          thumb: pickChannelThumbnail(e) || pickThumbnail(e),
+        };
+        break;
+      }
     }
-    const art = normText(stripTopicSuffix(pickArtist(e)));
-    if (!art) {
-      continue;
+    if (!best && rows.length > 0) {
+      const e = rows[0];
+      const ch = pickChannelId(e);
+      if (ch && isYoutubeChannelId(ch)) {
+        best = {
+          ch,
+          name: stripTopicSuffix(pickArtist(e)) || trimmedName,
+          thumb: pickChannelThumbnail(e) || pickThumbnail(e),
+        };
+      }
     }
-    if (art === qn || art.includes(qn) || significantTokens(trimmedName).every((t) => art.includes(t))) {
-      best = {
-        ch,
-        name: stripTopicSuffix(pickArtist(e)) || trimmedName,
-        thumb: pickChannelThumbnail(e) || pickThumbnail(e),
-      };
-      break;
+    await ytdlpRateLimiter.recordSuccess(operation);
+    if (!best) {
+      return null;
     }
+    return { channelId: best.ch, name: best.name, thumbnailUrl: best.thumb };
+  } catch (err) {
+    const message = (err as Error).message.toLowerCase();
+    if (message.includes('429') || message.includes('too many requests')) {
+      await ytdlpRateLimiter.record429(operation);
+    }
+    throw err;
   }
-  if (!best && rows.length > 0) {
-    const e = rows[0];
-    const ch = pickChannelId(e);
-    if (ch && isYoutubeChannelId(ch)) {
-      best = {
-        ch,
-        name: stripTopicSuffix(pickArtist(e)) || trimmedName,
-        thumb: pickChannelThumbnail(e) || pickThumbnail(e),
-      };
-    }
-  }
-  if (!best) {
-    return null;
-  }
-  return { channelId: best.ch, name: best.name, thumbnailUrl: best.thumb };
 }
 
 async function fetchChannelExtras(channelId: string): Promise<{ subscribers: number | null; description: string | null }> {
@@ -590,42 +619,53 @@ export class YtdlpService {
       CACHE_TTL_SEC,
       undefined,
       async () => {
-        const stdout = await runYtdlpFlat(`ytsearch20:${q} full album`, 20);
-        const entries = parseJsonLines(stdout);
+        const operation = 'searchAlbums';
+        await ytdlpRateLimiter.enter(operation);
+        try {
+          const stdout = await runYtdlpFlat(`ytsearch20:${q} full album`, 20);
+          const entries = parseJsonLines(stdout);
 
-        const qn = normText(q);
-        const rows: AlbumSearchHit[] = [];
-        const seen = new Set<string>();
+          const qn = normText(q);
+          const rows: AlbumSearchHit[] = [];
+          const seen = new Set<string>();
 
-        for (const entry of entries) {
-          const id = entry.id;
-          if (typeof id !== 'string' || !id || seen.has(id)) {
-            continue;
+          for (const entry of entries) {
+            const id = entry.id;
+            if (typeof id !== 'string' || !id || seen.has(id)) {
+              continue;
+            }
+            const titleRaw = typeof entry.title === 'string' ? entry.title : '';
+            const duration = parseDuration(entry.duration);
+            const titleHasAlbum = /album/i.test(titleRaw);
+            if (!titleHasAlbum && duration <= 1800) {
+              continue;
+            }
+            seen.add(id);
+            rows.push({
+              trackId: id,
+              title: cleanAlbumSearchTitle(titleRaw),
+              artist: pickChannelOrUploader(entry),
+              thumbnailUrl: pickThumbnail(entry),
+              duration,
+              itemCount: pickPlaylistCount(entry),
+            });
           }
-          const titleRaw = typeof entry.title === 'string' ? entry.title : '';
-          const duration = parseDuration(entry.duration);
-          const titleHasAlbum = /album/i.test(titleRaw);
-          if (!titleHasAlbum && duration <= 1800) {
-            continue;
-          }
-          seen.add(id);
-          rows.push({
-            trackId: id,
-            title: cleanAlbumSearchTitle(titleRaw),
-            artist: pickChannelOrUploader(entry),
-            thumbnailUrl: pickThumbnail(entry),
-            duration,
-            itemCount: pickPlaylistCount(entry),
+
+          rows.sort((a, b) => {
+            const aArtistMatch = qn && normText(a.artist).includes(qn) ? 0 : 1;
+            const bArtistMatch = qn && normText(b.artist).includes(qn) ? 0 : 1;
+            return aArtistMatch - bArtistMatch;
           });
+
+          await ytdlpRateLimiter.recordSuccess(operation);
+          return rows;
+        } catch (err) {
+          const message = (err as Error).message.toLowerCase();
+          if (message.includes('429') || message.includes('too many requests')) {
+            await ytdlpRateLimiter.record429(operation);
+          }
+          throw err;
         }
-
-        rows.sort((a, b) => {
-          const aArtistMatch = qn && normText(a.artist).includes(qn) ? 0 : 1;
-          const bArtistMatch = qn && normText(b.artist).includes(qn) ? 0 : 1;
-          return aArtistMatch - bArtistMatch;
-        });
-
-        return rows;
       },
       this.albumSearchInflight,
       this.albumSearchRefresh,
@@ -704,28 +744,39 @@ export class YtdlpService {
       CACHE_TTL_SEC,
       undefined,
       async () => {
-        const stdoutMain = await runYtdlpFlat(`ytsearch25:${q}`, 25);
-        const entries = parseJsonLines(stdoutMain);
-        const tracks: SearchResult[] = [];
-        const seen = new Set<string>();
-        for (const entry of entries) {
-          const id = entry.id;
-          if (typeof id !== 'string' || !isYoutubeVideoId(id) || seen.has(id)) {
-            continue;
+        const operation = 'search';
+        await ytdlpRateLimiter.enter(operation);
+        try {
+          const stdoutMain = await runYtdlpFlat(`ytsearch25:${q}`, 25);
+          const entries = parseJsonLines(stdoutMain);
+          const tracks: SearchResult[] = [];
+          const seen = new Set<string>();
+          for (const entry of entries) {
+            const id = entry.id;
+            if (typeof id !== 'string' || !isYoutubeVideoId(id) || seen.has(id)) {
+              continue;
+            }
+            seen.add(id);
+            tracks.push({
+              trackId: id,
+              title: typeof entry.title === 'string' ? entry.title : '',
+              artist: pickArtist(entry),
+              thumbnailUrl: pickThumbnail(entry),
+              duration: parseDuration(entry.duration),
+            });
+            if (tracks.length >= 40) {
+              break;
+            }
           }
-          seen.add(id);
-          tracks.push({
-            trackId: id,
-            title: typeof entry.title === 'string' ? entry.title : '',
-            artist: pickArtist(entry),
-            thumbnailUrl: pickThumbnail(entry),
-            duration: parseDuration(entry.duration),
-          });
-          if (tracks.length >= 40) {
-            break;
+          await ytdlpRateLimiter.recordSuccess(operation);
+          return { tracks, albums: [], artists: [] };
+        } catch (err) {
+          const message = (err as Error).message.toLowerCase();
+          if (message.includes('429') || message.includes('too many requests')) {
+            await ytdlpRateLimiter.record429(operation);
           }
+          throw err;
         }
-        return { tracks, albums: [], artists: [] };
       },
       this.bundleInflight,
       this.bundleRefresh,
@@ -766,11 +817,43 @@ export class YtdlpService {
     const videosUrl = `https://www.youtube.com/channel/${channelId}/videos`;
     const playlistsUrl = `https://www.youtube.com/channel/${channelId}/playlists`;
 
-    const [stdoutVideos, stdoutPl, extras] = await Promise.all([
-      runYtdlpFlat(videosUrl, playlistEnd).catch(() => ''),
-      runYtdlpFlat(playlistsUrl, playlistEnd).catch(() => ''),
-      fetchChannelExtras(channelId),
-    ]);
+    const operation = 'getArtistPage';
+    await ytdlpRateLimiter.enter(operation);
+
+    let videosResult = '';
+    let playlistsResult = '';
+    let extrasResult: { subscribers: number | null; description: string | null } = { subscribers: null, description: null };
+
+    try {
+      [videosResult, playlistsResult, extrasResult] = await Promise.all([
+        runYtdlpFlat(videosUrl, playlistEnd).catch((err) => {
+          const msg = (err as Error).message.toLowerCase();
+          if (msg.includes('429') || msg.includes('too many requests')) {
+            void ytdlpRateLimiter.record429(operation);
+          }
+          return '';
+        }),
+        runYtdlpFlat(playlistsUrl, playlistEnd).catch((err) => {
+          const msg = (err as Error).message.toLowerCase();
+          if (msg.includes('429') || msg.includes('too many requests')) {
+            void ytdlpRateLimiter.record429(operation);
+          }
+          return '';
+        }),
+        fetchChannelExtras(channelId).catch(() => ({ subscribers: null, description: null })),
+      ]);
+      await ytdlpRateLimiter.recordSuccess(operation);
+    } catch (err) {
+      const message = (err as Error).message.toLowerCase();
+      if (message.includes('429') || message.includes('too many requests')) {
+        await ytdlpRateLimiter.record429(operation);
+      }
+      throw err;
+    }
+
+    const stdoutVideos = videosResult;
+    const stdoutPl = playlistsResult;
+    const extras = extrasResult;
 
     const videoEntries = stdoutVideos.trim() ? parseJsonLines(stdoutVideos) : [];
     if ((!displayName || displayName === 'Исполнитель') && videoEntries.length > 0) {
@@ -823,11 +906,14 @@ export class YtdlpService {
       }
     }
 
-    const maxAttempts = 5;
+    const maxAttempts = 3;
     let lastError: Error | null = null;
+    const operation = 'getStreamUrl';
 
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       try {
+        await ytdlpRateLimiter.enter(operation);
+
         const stdout = await runYtdlp([
           '-f',
           'bestaudio',
@@ -840,14 +926,19 @@ export class YtdlpService {
         }
 
         await redis.set(cacheKey, url, 'EX', STREAM_TTL_SEC);
+        await ytdlpRateLimiter.recordSuccess(operation);
         return url;
       } catch (err) {
         lastError = err as Error;
         const message = lastError.message.toLowerCase();
-        const isRateLimit = message.includes('429') || message.includes('too many requests');
+        const is429 = message.includes('429') || message.includes('too many requests');
         const isBotBlock = message.includes('sign in to confirm') || message.includes('bot');
 
-        if ((isRateLimit || isBotBlock) && attempt < maxAttempts - 1) {
+        if (is429) {
+          await ytdlpRateLimiter.record429(operation);
+        }
+
+        if ((is429 || isBotBlock) && attempt < maxAttempts - 1) {
           const delay = STREAM_RETRY_DELAY_MS * Math.pow(2, attempt);
           await new Promise((resolve) => setTimeout(resolve, delay));
           continue;
@@ -870,9 +961,20 @@ export class YtdlpService {
       META_TTL_SEC,
       undefined,
       async () => {
-        const stdout = await runYtdlp(['--dump-json', `https://www.youtube.com/watch?v=${id}`]);
-        const entry = JSON.parse(stdout.trim()) as Record<string, unknown>;
-        return mapFullEntry(entry);
+        const operation = 'getMetadata';
+        await ytdlpRateLimiter.enter(operation);
+        try {
+          const stdout = await runYtdlp(['--dump-json', `https://www.youtube.com/watch?v=${id}`]);
+          const entry = JSON.parse(stdout.trim()) as Record<string, unknown>;
+          await ytdlpRateLimiter.recordSuccess(operation);
+          return mapFullEntry(entry);
+        } catch (err) {
+          const message = (err as Error).message.toLowerCase();
+          if (message.includes('429') || message.includes('too many requests')) {
+            await ytdlpRateLimiter.record429(operation);
+          }
+          throw err;
+        }
       },
       this.metadataInflight,
       this.metadataRefresh,

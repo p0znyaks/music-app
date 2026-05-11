@@ -20,4 +20,12 @@ COPY src ./src
 RUN npm run build
 
 EXPOSE 3000
+
+# Cookie configuration for yt-dlp:
+# Option 1: Browser cookies (recommended for local dev)
+#   YTDLP_COOKIES_BROWSER=chrome
+#   YTDLP_BROWSER_CONFIG_PATH=~/.config/google-chrome
+# Option 2: Cookies file
+#   YTDLP_COOKIES_FILE=/path/to/cookies.txt
+
 CMD ["node", "dist/main.js"]

@@ -20,3 +20,5 @@ docker compose down
 ## Проверка
 - DEV: `https://localhost:8443`
 - PROD: `https://localhost:1443`
+
+## Локально → git push → сервер git pull → docker up

@@ -8,6 +8,7 @@ import type { AppTrack } from '../../shared/models/track.model';
 import type { HomeRecoResponse } from './home.model';
 import { TranslatePipe } from '../../shared/pipes/t.pipe';
 import { AppSettingsService } from '../../core/services/app-settings.service';
+import { formatDurationClock, normalizeDurationSeconds } from '../../shared/utils/duration.util';
 
 @Component({
   selector: 'app-home',
@@ -171,6 +172,7 @@ import { AppSettingsService } from '../../core/services/app-settings.service';
                     <span class="title">{{ track.title }}</span>
                     <span class="sub">{{ track.artist }}</span>
                   </span>
+                  <span class="dur">{{ formatDuration(track) }}</span>
                 </button>
               }
             </div>
@@ -382,6 +384,13 @@ import { AppSettingsService } from '../../core/services/app-settings.service';
       font-size: 0.8rem;
       color: var(--accent-dim);
     }
+    .dur {
+      font-size: 0.8rem;
+      color: var(--accent-dim);
+      font-variant-numeric: tabular-nums;
+      flex-shrink: 0;
+      margin-left: auto;
+    }
     .error {
       color: #c44;
     }
@@ -541,17 +550,23 @@ export class HomeComponent {
       title: row.title,
       artist: row.artist,
       thumbnailUrl: row.thumbnailUrl ?? undefined,
-      duration: row.duration ?? undefined,
+      duration: typeof row.duration === 'number' ? row.duration : undefined,
     }));
     const current: PlayerTrack = {
       trackId: track.trackId,
       title: track.title,
       artist: track.artist,
       thumbnailUrl: track.thumbnailUrl ?? undefined,
-      duration: track.duration ?? undefined,
+      duration: typeof track.duration === 'number' ? track.duration : undefined,
     };
     this.player.setQueue(normalizedQueue);
     this.player.play(current);
+  }
+
+  formatDuration(track: AppTrack): string {
+    const sec = normalizeDurationSeconds(track.duration);
+    if (sec == null) return '';
+    return formatDurationClock(sec);
   }
 
   private normalizeHomePayload(payload: HomeRecoResponse): HomeRecoResponse {

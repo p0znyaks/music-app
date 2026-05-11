@@ -45,16 +45,18 @@ import { AppSettingsService } from '../../../core/services/app-settings.service'
       <div class="list">
         @for (row of tracks(); track row.trackId + '-' + row.id) {
           <div class="row">
-            <app-track-card class="grow" [track]="toAppTrack(row)" [inPlaylist]="true" [allowTagging]="true" [queue]="queueTracks()" />
-            <button
-              type="button"
-              class="rm list-rm tap"
-              (click)="removeTrack(row.trackId)"
-              [title]="'remove' | t"
-              [attr.aria-label]="'remove' | t"
-            >
-              🗑️
-            </button>
+            <app-track-card class="grow" [track]="toAppTrack(row)" [showDuration]="true" [inPlaylist]="true" [allowTagging]="!isMix()" [queue]="queueTracks()" />
+            @if (!isMix()) {
+              <button
+                type="button"
+                class="rm list-rm tap"
+                (click)="removeTrack(row.trackId)"
+                [title]="'remove' | t"
+                [attr.aria-label]="'remove' | t"
+              >
+                🗑️
+              </button>
+            }
           </div>
         }
       </div>
@@ -231,6 +233,7 @@ export class PlaylistDetailComponent {
 
   readonly playlistId = signal<number>(0);
   readonly mixId = signal<string | null>(null);
+  readonly isMix = computed(() => this.mixId() !== null);
   readonly title = signal(this.settings.t('playlists'));
   readonly tracks = signal<
     {

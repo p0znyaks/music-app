@@ -55,7 +55,10 @@ interface PlaylistRow {
               </div>
               <div class="meta">
                 <div class="t-title">{{ t.title }}</div>
-                <button type="button" class="t-artist" (click)="openArtist(t.artist)">{{ t.artist }}</button>
+                <div class="t-artist-row">
+                  <button type="button" class="t-artist" (click)="openArtist(t.artist)">{{ t.artist }}</button>
+                  <span class="t-dur">{{ formatTime(t.duration ?? 0) }}</span>
+                </div>
               </div>
             </div>
 
@@ -142,9 +145,11 @@ interface PlaylistRow {
                           <div class="eq" aria-hidden="true"><span></span><span></span><span></span></div>
                         }
                       </div>
-                      <div class="queue-artist">{{ q.artist }}</div>
+                      <div class="queue-artist-row">
+                        <div class="queue-artist">{{ q.artist }}</div>
+                        <span class="queue-dur">{{ formatTime(q.duration ?? 0) }}</span>
+                      </div>
                     </div>
-                    <div class="queue-dur">{{ formatTime(q.duration ?? 0) }}</div>
                   </button>
                 </div>
               }
@@ -327,11 +332,20 @@ interface PlaylistRow {
       min-width: 0;
       height: 100%;
     }
-    .left {
+.left {
       gap: 14px;
       padding-left: 24px;
       min-width: 0;
       align-self: center;
+      flex-shrink: 1;
+      max-width: 380px;
+    }
+    .meta {
+      min-width: 0;
+      flex: 1;
+      max-width: 280px;
+      display: flex;
+      flex-direction: column;
     }
     .thumb-wrap {
       width: 72px;
@@ -365,20 +379,25 @@ interface PlaylistRow {
       text-overflow: ellipsis;
       line-height: 1.25;
     }
+    .t-artist-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 2px;
+    }
     .t-artist {
-      display: block;
+      display: inline-block;
+      max-width: 200px;
       border: none;
       background: transparent;
       padding: 0;
       cursor: pointer;
       text-align: left;
-      font: inherit;
       font-size: 14px;
       color: var(--accent-dim);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      margin-top: 2px;
       text-decoration: none;
       transition: color 0.2s ease;
     }
@@ -390,6 +409,12 @@ interface PlaylistRow {
       color: var(--accent);
       text-decoration: underline;
       outline: none;
+    }
+    .t-dur {
+      font-size: 14px;
+      color: var(--accent-dim);
+      font-variant-numeric: tabular-nums;
+      flex-shrink: 0;
     }
     .center {
       flex-direction: column;
@@ -628,6 +653,8 @@ interface PlaylistRow {
     .queue-meta {
       min-width: 0;
       flex: 1;
+      display: flex;
+      flex-direction: column;
     }
     .queue-title {
       display: flex;
@@ -639,8 +666,13 @@ interface PlaylistRow {
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    .queue-artist {
+    .queue-artist-row {
+      display: flex;
+      align-items: center;
+      gap: 5px;
       margin-top: 2px;
+    }
+    .queue-artist {
       font-size: 0.82rem;
       color: var(--accent-dim);
       white-space: nowrap;
@@ -652,6 +684,7 @@ interface PlaylistRow {
       color: var(--accent-dim);
       font-variant-numeric: tabular-nums;
       flex-shrink: 0;
+      display: inline;
     }
     .eq {
       display: inline-flex;

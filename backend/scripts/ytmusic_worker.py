@@ -25,6 +25,25 @@ PY_WORKER_THREADS = max(1, int(os.getenv("PY_WORKER_THREADS", "16")))
 RECO_BATCH_WORKERS = max(1, int(os.getenv("PY_RECO_BATCH_WORKERS", "4")))
 RECO_429_RETRIES = max(0, int(os.getenv("PY_RECO_429_RETRIES", "2")))
 
+# --- yt-dlp cookie configuration ---
+_YTDLP_COOKIES_BROWSER = os.getenv("YTDLP_COOKIES_BROWSER", "").strip() or None
+_YTDLP_COOKIES_FILE = os.getenv("YTDLP_COOKIES_FILE", "").strip() or None
+_YTDLP_BROWSER_CONFIG_PATH = os.getenv("YTDLP_BROWSER_CONFIG_PATH", "").strip() or None
+
+
+def _ytdlp_cookie_opts() -> dict:
+    opts: Dict[str, Any] = {}
+    if _YTDLP_COOKIES_BROWSER:
+        config_path = _YTDLP_BROWSER_CONFIG_PATH
+        if config_path:
+            opts["cookiesfrombrowser"] = (_YTDLP_COOKIES_BROWSER, config_path)
+        else:
+            opts["cookiesfrombrowser"] = (_YTDLP_COOKIES_BROWSER,)
+    elif _YTDLP_COOKIES_FILE:
+        opts["cookiefile"] = _YTDLP_COOKIES_FILE
+    return opts
+
+
 # --- search constants (mirror ytdlp.service.ts) ---
 MAX_TRACKS_OUT = 40
 MAX_ALBUMS_OUT = 25
@@ -44,6 +63,7 @@ YTDLP_FLAT_OPTS_BASE = {
     "extract_flat": True,
     "socket_timeout": 6,
     "retries": 1,
+    **_ytdlp_cookie_opts(),
 }
 
 STOP_WORDS = frozenset(
@@ -934,6 +954,15 @@ def do_reco_albums_batch(queries: List[str]) -> dict:
     return {"results": out}
 
 
+def do_search_tracks(q: str) -> List[dict]:
+    main_url = f"ytsearch{YT_SEARCH_MAIN}:{q}"
+    try:
+        entries = _ytdlp_flat_entries(main_url, PLAYLIST_END)
+        return rank_track_entries(entries, MAX_TRACKS_OUT)
+    except Exception:
+        return []
+
+
 def handle_command_sync(cmd: dict) -> dict:
     req_id = cmd.get("id", "")
     action = cmd.get("action", "")
@@ -977,6 +1006,9 @@ def handle_command_sync(cmd: dict) -> dict:
         if action == "reco_albums_batch":
             qs = args.get("queries") or []
             return {"id": req_id, "ok": True, "data": do_reco_albums_batch(list(qs))}
+        if action == "search_tracks":
+            q = (args.get("query") or "").strip()
+            return {"id": req_id, "ok": True, "data": do_search_tracks(q)}
         return {"id": req_id, "ok": False, "error": f"unknown action: {action}"}
     except Exception as e:
         return {"id": req_id, "ok": False, "error": str(e) or repr(e), "trace": traceback.format_exc()[-2000:]}
