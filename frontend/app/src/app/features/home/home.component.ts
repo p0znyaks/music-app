@@ -70,6 +70,7 @@ import { formatDurationClock, normalizeDurationSeconds } from '../../shared/util
                   <span class="title">{{ track.title }}</span>
                   <span class="sub">{{ track.artist }}</span>
                 </span>
+                <span class="dur">{{ formatDuration(track) }}</span>
               </button>
             }
           </div>

@@ -6,10 +6,12 @@ import {
   ListenHistoryCacheService,
   type CachedListenHistoryRow,
 } from '../../core/services/listen-history-cache.service';
-import { AppTrack } from '../../shared/models/track.model';
+import { PlayerService, type PlayerTrack } from '../../core/services/player.service';
+import { normalizeDurationSeconds } from '../../shared/utils/duration.util';
 import { TrackCardComponent } from '../../shared/components/track-card/track-card.component';
 import { TranslatePipe } from '../../shared/pipes/t.pipe';
 import { AppSettingsService } from '../../core/services/app-settings.service';
+import { AppTrack } from '../../shared/models/track.model';
 
 interface HistoryRow {
   id: number;
@@ -17,6 +19,7 @@ interface HistoryRow {
   title: string;
   artist: string;
   thumbnailUrl: string | null;
+  duration: number | null;
   listenedAt: string;
 }
 
@@ -56,7 +59,7 @@ interface HistoryGroup {
                 <h2>{{ group.title }}</h2>
                 <div class="group">
                   @for (row of group.rows; track row.id) {
-                    <app-track-card [track]="toTrack(row)" />
+                    <app-track-card [track]="toTrack(row)" [showDuration]="true" [queue]="queueTracks()" />
                   }
                 </div>
               </section>
@@ -147,6 +150,7 @@ interface HistoryGroup {
 })
 export class HistoryComponent {
   private readonly api = inject(ApiService);
+  private readonly player = inject(PlayerService);
   private readonly listenHistoryCache = inject(ListenHistoryCacheService);
   private readonly settings = inject(AppSettingsService);
 
@@ -157,6 +161,7 @@ export class HistoryComponent {
 
   readonly filteredRows = computed(() => this.applyQueryFilter(this.rows(), this.query()));
   readonly groupedRows = computed<HistoryGroup[]>(() => this.buildGroups(this.filteredRows()));
+  readonly queueTracks = computed<PlayerTrack[]>(() => this.rows().map((row) => this.toPlayerTrack(row)));
 
   constructor() {
     this.api.get<CachedListenHistoryRow[]>('history').subscribe({
@@ -177,6 +182,17 @@ export class HistoryComponent {
       title: row.title,
       artist: row.artist,
       thumbnailUrl: row.thumbnailUrl,
+      duration: normalizeDurationSeconds(row.duration) ?? undefined,
+    };
+  }
+
+  private toPlayerTrack(row: HistoryRow): PlayerTrack {
+    return {
+      trackId: row.trackId,
+      title: row.title,
+      artist: row.artist,
+      thumbnailUrl: row.thumbnailUrl ?? undefined,
+      duration: normalizeDurationSeconds(row.duration) ?? undefined,
     };
   }
 

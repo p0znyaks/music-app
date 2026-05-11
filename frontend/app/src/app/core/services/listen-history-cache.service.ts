@@ -7,6 +7,7 @@ export interface CachedListenHistoryRow {
   title: string;
   artist: string;
   thumbnailUrl: string | null;
+  duration: number | null;
   listenedAt: string;
 }
 
@@ -18,7 +19,7 @@ export class ListenHistoryCacheService {
   private readonly maxItems = 500;
   private readonly keyPrefix = 'muze_listen_history_';
 
-  record(track: { trackId: string; title: string; artist: string; thumbnailUrl?: string | null }): void {
+  record(track: { trackId: string; title: string; artist: string; thumbnailUrl?: string | null; duration?: number | null }): void {
     const trackId = track.trackId?.trim();
     const title = track.title?.trim();
     const artist = track.artist?.trim();
@@ -33,6 +34,7 @@ export class ListenHistoryCacheService {
       title,
       artist,
       thumbnailUrl: track.thumbnailUrl ?? null,
+      duration: track.duration ?? null,
       listenedAt: nowIso,
     };
 
@@ -91,6 +93,7 @@ export class ListenHistoryCacheService {
         title: r.title.trim(),
         artist: r.artist.trim(),
         thumbnailUrl: r.thumbnailUrl ?? null,
+        duration: r.duration ?? null,
         listenedAt: r.listenedAt,
       }));
   }
