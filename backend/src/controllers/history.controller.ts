@@ -9,7 +9,7 @@ export async function addHistory(req: Request, res: Response) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
 
-  const { trackId, title, artist, thumbnailUrl } = req.body ?? {};
+  const { trackId, title, artist, thumbnailUrl, duration } = req.body ?? {};
   if (typeof trackId !== 'string' || !trackId.trim()) {
     return res.status(400).json({ message: 'trackId is required' });
   }
@@ -24,6 +24,7 @@ export async function addHistory(req: Request, res: Response) {
     title,
     artist,
     thumbnailUrl: typeof thumbnailUrl === 'string' ? thumbnailUrl : null,
+    duration: typeof duration === 'number' ? duration : null,
   });
   await repo.save(row);
 
@@ -33,6 +34,7 @@ export async function addHistory(req: Request, res: Response) {
     title: row.title,
     artist: row.artist,
     thumbnailUrl: row.thumbnailUrl,
+    duration: row.duration,
     listenedAt: row.listenedAt,
   });
 }
@@ -57,6 +59,7 @@ export async function listHistory(req: Request, res: Response) {
       title: r.title,
       artist: r.artist,
       thumbnailUrl: r.thumbnailUrl,
+      duration: r.duration,
       listenedAt: r.listenedAt,
     })),
   );

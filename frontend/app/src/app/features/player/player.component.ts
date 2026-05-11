@@ -1335,6 +1335,7 @@ constructor() {
       title: t.title,
       artist: t.artist,
       thumbnailUrl: t.thumbnailUrl ?? null,
+      duration: t.duration ?? null,
     });
     this.api
       .post('history', {
@@ -1342,6 +1343,7 @@ constructor() {
         title: t.title,
         artist: t.artist,
         thumbnailUrl: t.thumbnailUrl ?? undefined,
+        duration: t.duration ?? undefined,
       })
       .subscribe({ error: () => {} });
   }
