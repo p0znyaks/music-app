@@ -57,7 +57,7 @@ interface PlaylistRow {
                 <div class="t-title">{{ t.title }}</div>
                 <div class="t-artist-row">
                   <button type="button" class="t-artist" (click)="openArtist(t.artist)">{{ t.artist }}</button>
-                  <span class="t-dur">{{ formatTime(t.duration ?? 0) }}</span>
+                  <span class="t-dur">{{ formatTime(totalSec()) }}</span>
                 </div>
               </div>
             </div>
