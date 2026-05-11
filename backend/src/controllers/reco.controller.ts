@@ -16,7 +16,7 @@ type RecoTrack = {
   title: string;
   artist: string;
   thumbnailUrl: string | null;
-  duration: number | null;
+  duration: number | string | null;
 };
 
 type RecoAlbum = {
@@ -59,7 +59,7 @@ type HomeRecoResponse = {
 
 const PAGE_SIZE = 6;
 const MAX_FORWARD_PAGES = 2;
-const MAX_RECO_SEEDS = 8;
+const MAX_RECO_SEEDS = 3;
 const MAX_TOP_ARTISTS = 5;
 const YTDLP_METADATA_CONCURRENCY = 3;
 
@@ -91,7 +91,7 @@ type MixTrackRow = {
   title: string;
   artist: string;
   thumbnailUrl: string | null;
-  duration: number | null;
+  duration: number | string | null;
 };
 
 function mixKey(params: { userId: number; hourBucket: string; n: number }): string {
@@ -171,7 +171,7 @@ function asRecoTrack(row: {
   title: string;
   artist: string;
   thumbnailUrl: string | null;
-  duration?: number | null;
+  duration?: number | string | null;
 }): RecoTrack {
   return {
     trackId: row.trackId,
@@ -221,7 +221,8 @@ function capArtists(rows: RecoTrack[], perArtistLimit: number, totalLimit: numbe
 async function fillMissingTrackMedia<T extends RecoTrack>(rows: T[], maxLookup = 10): Promise<T[]> {
   const missing = rows.filter((row) => {
     const needsThumb = !row.thumbnailUrl || !row.thumbnailUrl.trim();
-    const needsDuration = !Number.isFinite(row.duration ?? NaN) || (row.duration ?? 0) <= 0;
+    const durNum = Number(row.duration) ?? NaN;
+    const needsDuration = !Number.isFinite(durNum) || durNum <= 0;
     return !!row.trackId?.trim() && (needsThumb || needsDuration);
   });
   if (missing.length === 0) {
@@ -274,7 +275,8 @@ async function fillMissingTrackMedia<T extends RecoTrack>(rows: T[], maxLookup =
             return false;
           }
           const needsThumb = !row.thumbnailUrl || !row.thumbnailUrl.trim();
-          const needsDuration = !Number.isFinite(row.duration ?? NaN) || (row.duration ?? 0) <= 0;
+          const durNum = Number(row.duration) ?? NaN;
+          const needsDuration = !Number.isFinite(durNum) || durNum <= 0;
           return needsThumb || needsDuration;
         })
         .map((row) => row.trackId.trim()),
@@ -311,7 +313,8 @@ async function fillMissingTrackMedia<T extends RecoTrack>(rows: T[], maxLookup =
       return row;
     }
     const hasThumb = typeof row.thumbnailUrl === 'string' && row.thumbnailUrl.trim().length > 0;
-    const hasDuration = Number.isFinite(row.duration ?? NaN) && (row.duration ?? 0) > 0;
+    const durNum = Number(row.duration) ?? NaN;
+    const hasDuration = Number.isFinite(durNum) && durNum > 0;
     return {
       ...row,
       thumbnailUrl: hasThumb ? row.thumbnailUrl : hydrated.thumbnailUrl || null,
@@ -781,35 +784,39 @@ async function buildHomeRecoPayload(userId: number): Promise<HomeRecoResponse> {
   const seedTracks = takeUniqueTracks(recommendedPool, 40);
   const topArtists = pickTopArtists(seedTracks, MAX_TOP_ARTISTS);
 
-  let recommendedTracks: RecoTrack[] = [];
+  const radioPromise = seedTracks.length > 0
+    ? buildRadioRecommendations({
+        seedTracks,
+        excludeTrackIds: recentTrackIds,
+        totalLimit: PAGE_SIZE * (MAX_FORWARD_PAGES + 1),
+      })
+    : Promise.resolve([] as RecoTrack[]);
 
-  if (seedTracks.length > 0) {
-    recommendedTracks = await buildRadioRecommendations({
-      seedTracks,
-      excludeTrackIds: recentTrackIds,
-      totalLimit: PAGE_SIZE * (MAX_FORWARD_PAGES + 1),
-    });
-  }
+  type SimilarBlock = { seedArtist: string; items: RecoArtist[] };
+  type GenreBlock = { genre: string; tracks: RecoTrack[] };
+
+  const [radioResult, similarTo, albumsForYou, fallbackTracks, popularTracks] = await Promise.all([
+    radioPromise,
+    buildSimilarArtistBlocks(topArtists).catch(() => [] as SimilarBlock[]),
+    buildAlbumsBlock({ topArtists, recommendedTracks: [] }).catch(() => [] as RecoAlbum[]),
+    Promise.resolve(takeUniqueTracks(recommendedPool, PAGE_SIZE * (MAX_FORWARD_PAGES + 1))),
+    getPopularFallbackTracks().catch(() => [] as RecoTrack[]),
+  ]);
+
+  let recommendedTracks: RecoTrack[] = radioResult;
 
   if (recommendedTracks.length < 8) {
-    const fallback = takeUniqueTracks(recommendedPool, PAGE_SIZE * (MAX_FORWARD_PAGES + 1));
-    recommendedTracks = takeUniqueTracks([...recommendedTracks, ...fallback, ...(await getPopularFallbackTracks())], PAGE_SIZE * (MAX_FORWARD_PAGES + 1));
+    recommendedTracks = takeUniqueTracks([...recommendedTracks, ...fallbackTracks, ...popularTracks], PAGE_SIZE * (MAX_FORWARD_PAGES + 1));
   }
-  recommendedTracks = await fillMissingTrackMedia(recommendedTracks, 12);
-
-  const hb = hourBucketUtc();
-
-  const [similarTo, albumsForYou] = await Promise.all([
-    buildSimilarArtistBlocks(topArtists).catch(() => []),
-    buildAlbumsBlock({ topArtists, recommendedTracks }).catch(() => []),
-  ]);
 
   const finalGenres = await getUserGenres({ userId, hasHistory, recommendedTracks, albumsForYou });
 
   const [byGenre, mixesForYou] = await Promise.all([
-    buildGenreTrackBlocks(finalGenres).catch(() => []),
-    buildMixCardsForUser({ userId, hourBucket: hb, seedTracks, recentTrackIds, finalGenres }).catch(() => []),
+    buildGenreTrackBlocks(finalGenres).catch(() => [] as GenreBlock[]),
+    buildMixCardsForUser({ userId, hourBucket: hourBucketUtc(), seedTracks, recentTrackIds, finalGenres }).catch(() => []),
   ]);
+
+  const hydrated = await fillMissingTrackMedia(recommendedTracks, 12);
 
   return {
     generatedAt: new Date().toISOString(),
@@ -817,7 +824,7 @@ async function buildHomeRecoPayload(userId: number): Promise<HomeRecoResponse> {
       pageSize: PAGE_SIZE,
       maxForwardPages: MAX_FORWARD_PAGES,
     },
-    recommendedTracks,
+    recommendedTracks: hydrated,
     albumsForYou,
     mixesForYou: mixesForYou.length > 0 ? mixesForYou : buildMixesForYou(topArtists, byGenre),
     similarTo,

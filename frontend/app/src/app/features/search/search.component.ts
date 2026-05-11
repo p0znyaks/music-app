@@ -486,7 +486,7 @@ export class SearchComponent {
     }
 
     const queryDebounced = this.query$.pipe(
-      debounceTime(220),
+      debounceTime(150),
       map((q) => q.trim()),
       distinctUntilChanged(),
     );

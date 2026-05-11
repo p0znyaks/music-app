@@ -22,7 +22,7 @@ type MixTrack = {
   title: string;
   artist: string;
   thumbnailUrl: string | null;
-  duration?: number | null;
+  duration?: number | string | null;
   score: number;
   tags: string[];
   source: 'history' | 'favorite' | 'playlist' | 'ytm';

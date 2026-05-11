@@ -44,7 +44,7 @@ import { TranslatePipe } from '../../shared/pipes/t.pipe';
       } @else {
         <div class="list">
           @for (t of tracks(); track t.trackId) {
-            <app-track-card [track]="t" [allowTagging]="true" [queue]="queueTracks()" (favoriteRemoved)="load()" />
+            <app-track-card [track]="t" [showDuration]="true" [allowTagging]="true" [queue]="queueTracks()" (favoriteRemoved)="load()" />
           }
         </div>
       }

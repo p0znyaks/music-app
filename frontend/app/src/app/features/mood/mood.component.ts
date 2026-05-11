@@ -68,7 +68,7 @@ interface TagsPlaylist {
           </div>
           <div class="list">
             @for (t of playlist()?.tracks ?? []; track t.trackId) {
-              <app-track-card [track]="t" [queue]="queueTracks()" (favoriteRemoved)="onTrackSourceRemoved()" />
+              <app-track-card [track]="t" [showDuration]="true" [queue]="queueTracks()" (favoriteRemoved)="onTrackSourceRemoved()" />
             }
           </div>
         }
