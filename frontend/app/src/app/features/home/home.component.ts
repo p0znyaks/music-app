@@ -68,9 +68,13 @@ import { formatDurationClock, normalizeDurationSeconds } from '../../shared/util
                 </div>
                 <span class="track-info">
                   <span class="title">{{ track.title }}</span>
-                  <span class="sub">{{ track.artist }}</span>
+                  <span class="sub-row">
+                    <span class="sub">{{ track.artist }}</span>
+                    @if (formatDuration(track)) {
+                      <span class="dur">{{ formatDuration(track) }}</span>
+                    }
+                  </span>
                 </span>
-                <span class="dur">{{ formatDuration(track) }}</span>
               </button>
             }
           </div>
@@ -86,31 +90,6 @@ import { formatDurationClock, normalizeDurationSeconds } from '../../shared/util
                 <img class="tile-cover" [src]="album.thumbnailUrl" [alt]="album.title" width="168" height="168" />
                 <div class="tile-title">{{ album.title }}</div>
                 <div class="tile-sub">{{ album.artist }}</div>
-              </a>
-            }
-          </div>
-        </section>
-
-        <section class="section">
-          <div class="section-head">
-            <h2>{{ 'homeMixesForYou' | t }}</h2>
-          </div>
-          <div class="tile-grid static-eight">
-            @for (mix of d.mixesForYou.slice(0, 8); track mix.id) {
-              <a class="tile mix-tile" [routerLink]="['/mixes', mix.id]" [state]="{ name: mix.title }">
-                @if (mix.previewThumbs?.length) {
-                  <div class="mix-collage tile-cover" aria-hidden="true">
-                    @for (thumb of (mix.previewThumbs ?? []).slice(0, 4); track thumb) {
-                      <img [src]="thumb" [alt]="mix.title" />
-                    }
-                  </div>
-                } @else if (mix.thumbnailUrl) {
-                  <img class="tile-cover" [src]="mix.thumbnailUrl" [alt]="mix.title" width="168" height="168" />
-                } @else {
-                  <div class="tile-cover ph"></div>
-                }
-                <div class="tile-title">{{ mix.title }}</div>
-                <div class="tile-sub">{{ mix.subtitle }}</div>
               </a>
             }
           </div>
@@ -171,9 +150,13 @@ import { formatDurationClock, normalizeDurationSeconds } from '../../shared/util
                   </div>
                   <span class="track-info">
                     <span class="title">{{ track.title }}</span>
-                    <span class="sub">{{ track.artist }}</span>
+                    <span class="sub-row">
+                      <span class="sub">{{ track.artist }}</span>
+                      @if (formatDuration(track)) {
+                        <span class="dur">{{ formatDuration(track) }}</span>
+                      }
+                    </span>
                   </span>
-                  <span class="dur">{{ formatDuration(track) }}</span>
                 </button>
               }
             </div>
@@ -385,12 +368,16 @@ import { formatDurationClock, normalizeDurationSeconds } from '../../shared/util
       font-size: 0.8rem;
       color: var(--accent-dim);
     }
+    .sub-row {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
     .dur {
       font-size: 0.8rem;
       color: var(--accent-dim);
       font-variant-numeric: tabular-nums;
       flex-shrink: 0;
-      margin-left: auto;
     }
     .error {
       color: #c44;

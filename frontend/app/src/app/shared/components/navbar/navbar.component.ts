@@ -54,6 +54,14 @@ import { TranslatePipe } from '../../pipes/t.pipe';
           </svg>
           {{ 'tags' | t }}
         </a>
+        <a href="" [class.active]="isSectionActive('personal-mix')" class="nav-link" (click)="onSectionClick($event, 'personal-mix')">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M9 18V5l12-2v13" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="6" cy="18" r="3"/>
+            <circle cx="18" cy="16" r="3"/>
+          </svg>
+          {{ 'personalMix' | t }}
+        </a>
         <a href="" [class.active]="isSectionActive('profile')" class="nav-link" (click)="onSectionClick($event, 'profile')">
           <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke-linecap="round" />
@@ -159,6 +167,7 @@ export class NavbarComponent {
     favorites: '/favorites',
     history: '/history',
     mood: '/mood',
+    'personal-mix': '/personal-mix',
     profile: '/profile',
   };
   private static readonly SECTION_STORAGE_PREFIX = 'nav.lastUrl.';
@@ -261,6 +270,7 @@ export class NavbarComponent {
       first === 'favorites' ||
       first === 'history' ||
       first === 'mood' ||
+      first === 'personal-mix' ||
       first === 'profile'
     ) {
       return first;
@@ -269,4 +279,4 @@ export class NavbarComponent {
   }
 }
 
-type NavSection = 'search' | 'playlists' | 'favorites' | 'history' | 'mood' | 'profile';
+type NavSection = 'search' | 'playlists' | 'favorites' | 'history' | 'mood' | 'personal-mix' | 'profile';

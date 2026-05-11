@@ -148,6 +148,10 @@ const FALLBACK_TRANSLATIONS: Record<string, string> = {
   clipComing: 'Clip playback and metadata will load here.',
   tagsLimitExceeded: 'Maximum 20 tags allowed',
   codeLabel: 'Code',
+  regenerate: 'Regenerate',
+  personalMix: 'Personal Mix',
+  personalMixEmpty: 'Press the button to generate your personalized mixes.',
+  personalMixGenerate: 'Generate Personal Mix',
 };
 
 const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
@@ -294,6 +298,10 @@ const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     clipComing: 'Здесь появятся воспроизведение отрывока и метаданные.',
     codeLabel: 'Код',
     tagsLimitExceeded: 'Максимум 20 тегов',
+    regenerate: 'Сгенерировать',
+    personalMix: 'Персональный микс',
+    personalMixEmpty: 'Нажмите кнопку для генерации персональных миксов.',
+    personalMixGenerate: 'Сгенерировать персональный микс',
   },
 };
 

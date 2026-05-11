@@ -491,7 +491,7 @@ function buildMixesForYou(artists: string[], genreBlocks: Array<{ genre: string;
     const thumb = genreBlocks[(idx - 1) % Math.max(genreBlocks.length, 1)]?.tracks[0]?.thumbnailUrl ?? null;
     mixes.push({
       id: `mix-${idx}`,
-      title: `Микс для вас #${idx}`,
+      title: `Mix for you #${idx}`,
       subtitle: artistsInMix.join(', '),
       thumbnailUrl: thumb,
       artists: artistsInMix,
@@ -637,7 +637,7 @@ async function buildMixCardsForUser(params: {
         .slice(0, 4);
       return {
         id: `${hourBucket}-${n}`,
-        title: `Микс #${n}`,
+        title: `Mix #${n}`,
         subtitle: pickTopArtists(hydratedRows, 4).join(', '),
         thumbnailUrl: thumbs[0] ?? null,
         artists: pickTopArtists(hydratedRows, 4),
@@ -646,6 +646,75 @@ async function buildMixCardsForUser(params: {
     }),
   );
   return cards.filter((x): x is NonNullable<(typeof cards)[number]> => x !== null);
+}
+
+async function buildRegeneratedMixes(params: {
+  userId: number;
+  hourBucket: string;
+  seedTracks: RecoTrack[];
+}): Promise<HomeRecoResponse['mixesForYou']> {
+  const { userId, hourBucket, seedTracks } = params;
+  const genres = await extractGenresFromTracks(seedTracks);
+  const usedIds = new Set<string>(seedTracks.map((t) => t.trackId));
+
+  const shuffledGenres = [...genres];
+  const seed = userId;
+  for (let i = shuffledGenres.length - 1; i > 0; i--) {
+    let s = (seed * 1103515245 + i * 1664525) & 0x7fffffff;
+    const j = s % (i + 1);
+    [shuffledGenres[i], shuffledGenres[j]] = [shuffledGenres[j], shuffledGenres[i]];
+  }
+
+  const cards: HomeRecoResponse['mixesForYou'] = [];
+  for (let n = 1; n <= 3; n++) {
+    const genre = shuffledGenres[(n - 1) % shuffledGenres.length] || 'mix';
+    const bundle = await ytdlpService.search(`${genre} music`);
+    let mixTracks = takeUniqueTracks(
+      bundle.tracks.map(asRecoTrack).filter((t) => !usedIds.has(t.trackId)),
+      PAGE_SIZE * (MAX_FORWARD_PAGES + 1),
+    );
+
+    if (mixTracks.length < 6) {
+      const fallbackBundle = await ytdlpService.search(`best ${genre} songs 2025`);
+      const fallbackTracks = takeUniqueTracks(
+        fallbackBundle.tracks.map(asRecoTrack).filter((t) => !usedIds.has(t.trackId)),
+        PAGE_SIZE * (MAX_FORWARD_PAGES + 1),
+      );
+      mixTracks = [...mixTracks, ...fallbackTracks];
+    }
+
+    for (const t of mixTracks) {
+      usedIds.add(t.trackId);
+    }
+
+    const rows: MixTrackRow[] = mixTracks.map((t, idx) => ({
+      id: idx + 1,
+      trackId: t.trackId,
+      title: t.title,
+      artist: t.artist,
+      thumbnailUrl: t.thumbnailUrl,
+      duration: t.duration,
+    }));
+    const hydratedRows = await fillMissingTrackMedia(rows, 12);
+    try {
+      await getRedis().set(mixKey({ userId, hourBucket, n }), JSON.stringify(hydratedRows), 'EX', TTL_RECO_MIX_SEC);
+    } catch {
+      /* ignore */
+    }
+    const thumbs = hydratedRows
+      .map((r) => r.thumbnailUrl)
+      .filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
+      .slice(0, 4);
+    cards.push({
+      id: `regen-${hourBucket}-${n}`,
+      title: `Mix #${n}`,
+      subtitle: pickTopArtists(hydratedRows, 4).join(', '),
+      thumbnailUrl: thumbs[0] ?? null,
+      artists: pickTopArtists(hydratedRows, 4),
+      previewThumbs: thumbs,
+    });
+  }
+  return cards;
 }
 
 async function buildAlbumsBlock(params: {
@@ -888,6 +957,60 @@ export async function getRecoHome(req: Request, res: Response) {
       return res.end();
     }
     return res.status(502).json({ message: 'Failed to load recommendations' });
+  }
+}
+
+export async function regenerateMixes(req: Request, res: Response) {
+  const userId = req.user?.id;
+  if (userId === undefined) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  const hb = hourBucketUtc();
+  const redis = getRedis();
+  const cacheKey = `reco:home:v4:${userId}:h:${hb}`;
+  recoHomeInflightV2.delete(cacheKey);
+  recoHomeInflightRefreshV2.delete(cacheKey);
+
+  try {
+    const [favRows, historyRows, tagRows] = await Promise.all([
+      AppDataSource.getRepository(FavoriteTrack).find({
+        where: { user: { id: userId } },
+        order: { addedAt: 'DESC' },
+        take: 120,
+      }),
+      AppDataSource.getRepository(ListenHistory).find({
+        where: { user: { id: userId } },
+        order: { listenedAt: 'DESC' },
+        take: 120,
+      }),
+      AppDataSource.getRepository(TrackTag).find({
+        where: { user: { id: userId } },
+        order: { addedAt: 'DESC' },
+        take: 120,
+      }),
+    ]);
+
+    const recentTrackIds = new Set<string>();
+    for (const row of historyRows.slice(0, 30)) {
+      const id = (row.trackId ?? '').trim();
+      if (id) recentTrackIds.add(id);
+    }
+
+    const seedTracks = takeUniqueTracks(
+      [...favRows.map(asRecoTrack), ...historyRows.map(asRecoTrack), ...tagRows.map(asRecoTrack)],
+      40,
+    );
+
+    const finalGenres = await getUserGenres({ userId, hasHistory: true, recommendedTracks: seedTracks, albumsForYou: [] });
+
+    const mixes = await buildMixCardsForUser({ userId, hourBucket: hb, seedTracks, recentTrackIds, finalGenres });
+    console.log('[regenerateMixes] seedTracks count:', seedTracks.length, 'genres:', finalGenres, 'mixes count:', mixes.length);
+
+    return res.json({ mixes });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Failed to generate mixes' });
   }
 }
 
