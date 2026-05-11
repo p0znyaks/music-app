@@ -9,7 +9,7 @@ import { ApiService } from '../../core/services/api.service';
 import { ArtistLookupService } from '../../core/services/artist-lookup.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ListenHistoryCacheService } from '../../core/services/listen-history-cache.service';
-import { PlayerService, type PlayerTrack } from '../../core/services/player.service';
+import { PlayerService, type PlayerTrack, type QueueSource } from '../../core/services/player.service';
 import { formatDurationClock, normalizeDurationSeconds } from '../../shared/utils/duration.util';
 import { ModalComponent } from '../../shared/components/modal/modal.component';
 import { TranslatePipe } from '../../shared/pipes/t.pipe';
@@ -147,7 +147,7 @@ interface PlaylistRow {
                       </div>
                       <div class="queue-artist-row">
                         <div class="queue-artist">{{ q.artist }}</div>
-                        @if (q.trackId !== t.trackId && q.duration != null) {
+                        @if (queueSource() !== 'history' && q.duration != null) {
                           <span class="queue-dur">{{ formatTime(q.duration) }}</span>
                         }
                       </div>
@@ -951,6 +951,7 @@ export class PlayerComponent {
   readonly track = toSignal(this.player.currentTrack$, { initialValue: null });
   readonly playing = toSignal(this.player.isPlaying$, { initialValue: false });
   readonly queue = toSignal(this.player.queue$, { initialValue: [] as PlayerTrack[] });
+  readonly queueSource = toSignal(this.player.queueSource$, { initialValue: 'unknown' as QueueSource});
 
   readonly progress = signal(0);
   readonly currentSec = signal(0);
@@ -1006,6 +1007,7 @@ export class PlayerComponent {
   protected readonly Math = Math;
 
   private historyLoggedFor: string | null = null;
+  private queueFromHistory = false;
   private dragStartY = 0;
   private dragStartExpanded = false;
   private suppressToggleUntil = 0;

@@ -10,7 +10,7 @@ import { ArtistLookupService } from '../../../core/services/artist-lookup.servic
 import { FavoritesService } from '../../../core/services/favorites.service';
 import { TagsService, type TagSort } from '../../../core/services/tags.service';
 import { ToastService } from '../../../core/services/toast.service';
-import { PlayerService, type PlayerTrack } from '../../../core/services/player.service';
+import { PlayerService, type PlayerTrack, type QueueSource } from '../../../core/services/player.service';
 import { AppTrack } from '../../models/track.model';
 import { formatDurationClock, normalizeDurationSeconds } from '../../utils/duration.util';
 import { ModalComponent } from '../modal/modal.component';
@@ -681,6 +681,8 @@ export class TrackCardComponent {
   /** Allow tag editing UI in this context (Favorites/Playlist only). */
   readonly allowTagging = input(false);
   readonly queue = input<PlayerTrack[] | null>(null);
+  /** Pass 'history' to mark queue source as history for special UI handling. */
+  readonly queueSource = input<QueueSource | undefined>(undefined);
   readonly favoriteRemoved = output<void>();
 
   private readonly favIds = toSignal(this.favorites.favorites$, { initialValue: [] as string[] });
@@ -752,10 +754,11 @@ export class TrackCardComponent {
       return;
     }
     const queue = this.queue();
+    const source = this.queueSource();
     if (queue && queue.length > 0) {
-      this.playerService.setQueue(queue);
+      this.playerService.setQueue(queue, source ?? 'unknown');
     } else {
-      this.playerService.setQueue([pt]);
+      this.playerService.setQueue([pt], source ?? 'unknown');
     }
     this.playerService.play(pt);
   }

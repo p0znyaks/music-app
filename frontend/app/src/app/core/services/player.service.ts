@@ -11,12 +11,15 @@ export interface PlayerTrack {
   endTime?: number | null;
 }
 
+export type QueueSource = 'unknown' | 'history';
+
 @Injectable({ providedIn: 'root' })
 export class PlayerService {
   readonly currentTrack$ = new BehaviorSubject<PlayerTrack | null>(null);
   readonly queue$ = new BehaviorSubject<PlayerTrack[]>([]);
   readonly isPlaying$ = new BehaviorSubject(false);
   readonly progress$ = new BehaviorSubject(0);
+  readonly queueSource$ = new BehaviorSubject<QueueSource>('unknown');
 
   private queueIndex = 0;
 
@@ -119,8 +122,9 @@ export class PlayerService {
     }
   }
 
-  setQueue(tracks: PlayerTrack[]): void {
+  setQueue(tracks: PlayerTrack[], source: QueueSource = 'unknown'): void {
     this.queue$.next([...tracks]);
+    this.queueSource$.next(source);
     this.queueIndex = 0;
     if (tracks.length > 0) {
       this.currentTrack$.next(tracks[0] ?? null);
@@ -130,14 +134,15 @@ export class PlayerService {
     this.progress$.next(0);
   }
 
-  startQueue(tracks: PlayerTrack[], options?: { shuffle?: boolean }): void {
+  startQueue(tracks: PlayerTrack[], options?: { shuffle?: boolean; source?: QueueSource }): void {
     if (tracks.length === 0) {
       this.setQueue([]);
       this.pause();
       return;
     }
+    const source = options?.source ?? 'unknown';
     const nextQueue = options?.shuffle ? this.shuffleTracks(tracks) : [...tracks];
-    this.setQueue(nextQueue);
+    this.setQueue(nextQueue, source);
     const first = nextQueue[0];
     if (first) {
       this.play(first);

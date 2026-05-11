@@ -58,7 +58,7 @@ interface HistoryGroup {
                 <h2>{{ group.title }}</h2>
                 <div class="group">
                   @for (row of group.rows; track row.id) {
-                    <app-track-card [track]="toTrack(row)" [queue]="queueTracks()" />
+                    <app-track-card [track]="toTrack(row)" [queue]="queueTracks()" queueSource="history" />
                   }
                 </div>
               </section>
