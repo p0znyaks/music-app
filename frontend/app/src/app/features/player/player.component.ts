@@ -149,7 +149,7 @@ interface PlaylistRow {
                         <div class="queue-artist">{{ q.artist }}</div>
                         @if (q.trackId === t.trackId) {
                           <span class="queue-dur">{{ formatTime(displayDur()) }}</span>
-                        } @else {
+                        } @else if (q.duration != null) {
                           <span class="queue-dur">{{ formatTime(normalizeDurationSeconds(q.duration) ?? 0) }}</span>
                         }
                       </div>
@@ -1344,6 +1344,19 @@ constructor() {
     if (!t || this.historyLoggedFor === t.trackId) return;
     if (t.trackId.startsWith('clip:')) return;
     this.historyLoggedFor = t.trackId;
+    
+    if (!t.duration && t.trackId && !t.trackId.startsWith('clip:')) {
+      this.api.get<{ duration: number }>(`tracks/${t.trackId}/meta`).subscribe({
+        next: (meta) => {
+          if (meta?.duration) {
+            const updated = { ...t, duration: meta.duration };
+            this.player.currentTrack$.next(updated);
+          }
+        },
+        error: () => {},
+      });
+    }
+    
     this.listenHistoryCache.record({
       trackId: t.trackId,
       title: t.title,
