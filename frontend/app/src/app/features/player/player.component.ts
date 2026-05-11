@@ -147,9 +147,7 @@ interface PlaylistRow {
                       </div>
                       <div class="queue-artist-row">
                         <div class="queue-artist">{{ q.artist }}</div>
-                        @if (q.trackId === t.trackId) {
-                          <span class="queue-dur">{{ formatTime(displayDur()) }}</span>
-                        } @else if (q.duration != null) {
+                        @if (q.trackId !== t.trackId && q.duration != null) {
                           <span class="queue-dur">{{ formatTime(q.duration) }}</span>
                         }
                       </div>
