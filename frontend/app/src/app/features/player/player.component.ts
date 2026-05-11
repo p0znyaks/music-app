@@ -57,7 +57,7 @@ interface PlaylistRow {
                 <div class="t-title">{{ t.title }}</div>
                 <div class="t-artist-row">
                   <button type="button" class="t-artist" (click)="openArtist(t.artist)">{{ t.artist }}</button>
-                  <span class="t-dur">{{ formatTime(totalSec()) }}</span>
+                  <span class="t-dur">{{ formatTime(displayDur()) }}</span>
                 </div>
               </div>
             </div>
@@ -148,9 +148,9 @@ interface PlaylistRow {
                       <div class="queue-artist-row">
                         <div class="queue-artist">{{ q.artist }}</div>
                         @if (q.trackId === t.trackId) {
-                          <span class="queue-dur">{{ formatTime(totalSec()) }}</span>
+                          <span class="queue-dur">{{ formatTime(displayDur()) }}</span>
                         } @else {
-                          <span class="queue-dur">{{ formatTime(q.duration ?? 0) }}</span>
+                          <span class="queue-dur">{{ formatTime(normalizeDurationSeconds(q.duration) ?? 0) }}</span>
                         }
                       </div>
                     </div>
@@ -978,6 +978,16 @@ export class PlayerComponent {
   readonly isClipTrack = computed(() => {
     const t = this.track();
     return t?.trackId.startsWith('clip:') ?? false;
+  });
+
+  readonly displayDur = computed(() => {
+    const t = this.track();
+    if (!t) return 0;
+    const fromTrack = normalizeDurationSeconds(t.duration);
+    const fromStream = this.totalSec();
+    if (fromStream > 0) return fromStream;
+    if (fromTrack != null) return fromTrack;
+    return 0;
   });
 
   readonly clipOpen = signal(false);
