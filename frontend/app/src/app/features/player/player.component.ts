@@ -150,7 +150,7 @@ interface PlaylistRow {
                         @if (q.trackId === t.trackId) {
                           <span class="queue-dur">{{ formatTime(displayDur()) }}</span>
                         } @else if (q.duration != null) {
-                          <span class="queue-dur">{{ formatTime(normalizeDurationSeconds(q.duration) ?? 0) }}</span>
+                          <span class="queue-dur">{{ formatTime(q.duration) }}</span>
                         }
                       </div>
                     </div>
