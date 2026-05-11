@@ -1,7 +1,6 @@
 import { randomUUID } from 'crypto';
 import { spawn, type ChildProcess } from 'child_process';
 import path from 'path';
-import { ytdlpRateLimiter } from './ytdlp-rate-limiter';
 
 export type PythonWorkerAction =
   | 'ping'
@@ -174,33 +173,23 @@ class PythonWorkerSlot {
   }
 
   async call<T>(action: PythonWorkerAction, args: Record<string, unknown> = {}): Promise<T> {
-    const operation = `python:${action}`;
-    await ytdlpRateLimiter.enter(operation);
     let lastErr: unknown;
     for (let attempt = 0; attempt < 3; attempt++) {
       const id = randomUUID();
       const payload = `${JSON.stringify({ id, action, args })}\n`;
       try {
         const child = this.ensureChild();
-        const result = await this.writeAndWaitResponse<T>(child, id, payload, false);
-        await ytdlpRateLimiter.recordSuccess(operation);
-        return result;
+        return await this.writeAndWaitResponse<T>(child, id, payload, false);
       } catch (e) {
         lastErr = e;
         this.killChild();
         this.stdoutBuf = '';
-        const msg = (e as Error)?.message?.toLowerCase() ?? '';
-        if (msg.includes('429') || msg.includes('too many requests')) {
-          await ytdlpRateLimiter.record429(operation);
-        }
       }
     }
     throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
   }
 
   async callStream(action: PythonWorkerAction, args: Record<string, unknown>, onPartial: (chunk: unknown) => void): Promise<void> {
-    const operation = `python:${action}`;
-    await ytdlpRateLimiter.enter(operation);
     let lastErr: unknown;
     for (let attempt = 0; attempt < 3; attempt++) {
       const id = randomUUID();
@@ -208,16 +197,11 @@ class PythonWorkerSlot {
       try {
         const child = this.ensureChild();
         await this.writeAndWaitResponse<unknown>(child, id, payload, true, onPartial);
-        await ytdlpRateLimiter.recordSuccess(operation);
         return;
       } catch (e) {
         lastErr = e;
         this.killChild();
         this.stdoutBuf = '';
-        const msg = (e as Error)?.message?.toLowerCase() ?? '';
-        if (msg.includes('429') || msg.includes('too many requests')) {
-          await ytdlpRateLimiter.record429(operation);
-        }
       }
     }
     throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
