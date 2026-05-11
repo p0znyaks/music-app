@@ -3,6 +3,7 @@ import { BehaviorSubject, Observable, tap } from 'rxjs';
 import { ApiService } from './api.service';
 import { FavoritesService } from './favorites.service';
 import { PlayerService } from './player.service';
+import { TagsService } from './tags.service';
 
 const TOKEN_KEY = 'muze_token';
 
@@ -24,6 +25,7 @@ export class AuthService {
   private readonly api = inject(ApiService);
   private readonly favorites = inject(FavoritesService);
   private readonly player = inject(PlayerService);
+  private readonly tags = inject(TagsService);
 
   readonly currentUser$ = new BehaviorSubject<AuthUser | null>(null);
 
@@ -61,9 +63,12 @@ export class AuthService {
 
   logout(): void {
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem('personalMixMixes');
+    localStorage.removeItem('personalMixHour');
     this.currentUser$.next(null);
     this.favorites.clear();
     this.player.reset();
+    this.tags.invalidate();
   }
 
   private persistToken(token: string): void {

@@ -10,11 +10,13 @@ export class TagsService {
   private readonly api = inject(ApiService);
 
   private readonly trackTagsCache = new Map<string, Observable<string[]>>();
-  private readonly distinctCache = new Map<TagSort, Observable<string[]>>();
+  private readonly distinctCache = new Map<string, Observable<string[]>>();
 
   private readonly changed$ = new BehaviorSubject(0);
 
   invalidate(): void {
+    this.trackTagsCache.clear();
+    this.distinctCache.clear();
     this.changed$.next(this.changed$.value + 1);
   }
 
@@ -44,7 +46,6 @@ export class TagsService {
         return out;
       }),
       catchError(() => of([])),
-      shareReplay(1),
     );
 
     // store real$, ignore req$
@@ -65,7 +66,6 @@ export class TagsService {
         map((rows) => (rows ?? []).map((r) => r.tag).filter((t) => typeof t === 'string' && t.trim().length > 0)),
         map((tags) => tags.map((t) => t.trim())),
         catchError(() => of([])),
-        shareReplay(1),
       );
     this.distinctCache.set(s, req$);
     return req$;
