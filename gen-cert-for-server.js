@@ -1,43 +1,52 @@
-const path = require('path');
+const { execSync } = require('child_process');
 const fs = require('fs');
-const forge = require(path.join(__dirname, 'backend', 'node_modules', 'node-forge'));
-const pki = forge.pki;
+const path = require('path');
 
 const serverIP = process.argv[2] || '127.0.0.1';
+const baseDir = __dirname;
 
-const keys = pki.rsa.generateKeyPair(2048);
-const cert = pki.createCertificate();
+const opensslConfig = `
+[req]
+distinguished_name = req_distinguished_name
+x509_extensions = v3_req
+prompt = no
 
-cert.publicKey = keys.publicKey;
-cert.serialNumber = '01';
-cert.validity.notBefore = new Date();
-cert.validity.notAfter = new Date();
-cert.validity.notAfter.setFullYear(cert.validity.notBefore.getFullYear() + 1);
+[req_distinguished_name]
+CN = ${serverIP}
 
-cert.setSubject([{ name: 'commonName', value: serverIP }]);
-cert.setExtensions([
-  {
-    name: 'subjectAltName',
-    altNames: [
-      { type: 2, value: 'localhost' },
-      { type: 7, ip: serverIP },
-    ],
-  },
-]);
+[v3_req]
+keyUsage = digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth
+subjectAltName = @alt_names
 
-cert.sign(keys.privateKey, forge.md.sha256.create());
+[alt_names]
+DNS.1 = localhost
+IP.1 = ${serverIP}
+`;
 
-const pemCert = pki.certificateToPem(cert);
-const pemKey = pki.privateKeyToPem(keys.privateKey);
+const tmpDir = fs.mkdtempSync(path.join(baseDir, '.cert-tmp-'));
+const configPath = path.join(tmpDir, 'openssl.cnf');
+const keyPath = path.join(tmpDir, 'key.pem');
+const certPath = path.join(tmpDir, 'cert.pem');
 
-// backend/
-fs.writeFileSync(path.join(__dirname, 'backend', 'server-key.pem'), pemKey);
-fs.writeFileSync(path.join(__dirname, 'backend', 'server-cert.pem'), pemCert);
+fs.writeFileSync(configPath, opensslConfig.trim());
 
-// nginx/certs/
-fs.writeFileSync(path.join(__dirname, 'nginx', 'certs', 'server-key.pem'), pemKey);
-fs.writeFileSync(path.join(__dirname, 'nginx', 'certs', 'server-cert.pem'), pemCert);
+execSync(
+  `openssl req -x509 -newkey rsa:2048 -keyout "${keyPath}" -out "${certPath}" -days 365 -config "${configPath}" -nodes -sha256`,
+  { stdio: 'inherit' }
+);
 
-console.log(`Generated cert for IP: ${serverIP}`);
-console.log('Updated: backend/server-cert.pem, backend/server-key.pem');
-console.log('Updated: nginx/certs/server-cert.pem, nginx/certs/server-key.pem');
+const keyData = fs.readFileSync(keyPath);
+const certData = fs.readFileSync(certPath);
+
+fs.writeFileSync(path.join(baseDir, 'backend', 'server-key.pem'), keyData);
+fs.writeFileSync(path.join(baseDir, 'backend', 'server-cert.pem'), certData);
+fs.writeFileSync(path.join(baseDir, 'nginx', 'certs', 'server-key.pem'), keyData);
+fs.writeFileSync(path.join(baseDir, 'nginx', 'certs', 'server-cert.pem'), certData);
+
+fs.rmSync(tmpDir, { recursive: true, force: true });
+
+console.log(`Generated self-signed cert for IP: ${serverIP} + localhost`);
+console.log('Updated:');
+console.log('  backend/server-cert.pem + backend/server-key.pem');
+console.log('  nginx/certs/server-cert.pem + nginx/certs/server-key.pem');
