@@ -10,25 +10,23 @@ import { PlaylistTrack } from './entities/playlist-track.entity';
 import { Playlist } from './entities/playlist.entity';
 import { Role } from './entities/role.entity';
 import { TrackTag } from './entities/track-tag.entity';
-import { UserMixPreferences } from './entities/user-mix-preferences.entity';
 import { User } from './entities/user.entity';
 import { AppDataSource } from './services/dataSource';
 import { startPythonPool } from './services/python-pool';
 import { connectRedis } from './services/redis';
+import { rewriteImageUrlsDeep } from './services/image-proxy.service';
 import { authRouter } from './routes/auth.routes';
 import { clipsRouter } from './routes/clips.routes';
 import { favoritesRouter } from './routes/favorites.routes';
 import { healthRouter } from './routes/health.routes';
 import { historyRouter } from './routes/history.routes';
 import { imageRouter } from './routes/image.routes';
-import { mixRouter } from './routes/mix.routes';
 import { playlistRouter } from './routes/playlist.routes';
 import { profileRouter } from './routes/profile.routes';
 import { recoRouter } from './routes/reco.routes';
 import { searchRouter } from './routes/search.routes';
 import { tagsRouter } from './routes/tags.routes';
 import { trackRouter } from './routes/track.routes';
-import { rewriteImageUrlsDeep } from './services/image-proxy.service';
 
 AppDataSource.setOptions({
   entities: [
@@ -40,7 +38,6 @@ AppDataSource.setOptions({
     ListenHistory,
     TrackTag,
     Clip,
-    UserMixPreferences,
   ],
   synchronize: true,
 });
@@ -88,7 +85,6 @@ async function bootstrap() {
   app.use('/api/favorites', favoritesRouter);
   app.use('/api/tags', tagsRouter);
   app.use('/api/clips', clipsRouter);
-  app.use('/api/mix', mixRouter);
   app.use('/api/profile', profileRouter);
   app.use('/api', recoRouter);
 

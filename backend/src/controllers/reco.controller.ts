@@ -4,7 +4,6 @@ import { FavoriteTrack } from '../entities/favorite-track.entity';
 import { ListenHistory } from '../entities/listen-history.entity';
 import { PlaylistTrack } from '../entities/playlist-track.entity';
 import { TrackTag } from '../entities/track-tag.entity';
-import { UserMixPreferences } from '../entities/user-mix-preferences.entity';
 import { parseEnvelope, redisGetSWR, stringifyEnvelope } from '../services/cache-swr';
 import { rewriteImageUrlsDeep } from '../services/image-proxy.service';
 import { getRedis } from '../services/redis';
@@ -118,8 +117,21 @@ const TOP_GENRES = [
   'metalcore',
 ];
 
+const FALLBACK_GENRES = [
+  'pop',
+  'rock',
+  'electronic',
+  'hip hop',
+  'indie',
+  'alternative',
+  'r&b',
+  'lofi',
+  'jazz',
+  'house',
+];
+
 function getPersonalizedFallbackGenres(userId: number): string[] {
-  const shuffled = [...TOP_GENRES];
+  const shuffled = [...FALLBACK_GENRES];
   let seed = userId;
   for (let i = shuffled.length - 1; i > 0; i--) {
     seed = (seed * 1103515245 + 12345) & 0x7fffffff;
@@ -129,9 +141,15 @@ function getPersonalizedFallbackGenres(userId: number): string[] {
   return shuffled.slice(0, 8);
 }
 
+/** More specific genres first — used in classification loops (first match wins). */
 const GENRE_KEYWORDS: Record<string, string[]> = {
-  metal: ['metal', 'thrash', 'doom', 'groove metal', 'death metal', 'black metal', 'metalcore'],
-  rock: ['rock', 'hard rock', 'classic rock', 'post rock'],
+  'death metal': ['death metal', 'deathcore'],
+  'black metal': ['black metal'],
+  metalcore: ['metalcore'],
+  metal: ['metal', 'thrash', 'doom', 'groove metal'],
+  'hard rock': ['hard rock'],
+  punk: ['punk', 'hardcore punk'],
+  rock: ['rock', 'classic rock', 'post rock'],
   alternative: ['alternative', 'alt'],
   indie: ['indie', 'dream pop', 'shoegaze'],
   pop: ['pop', 'synthpop'],
@@ -143,12 +161,35 @@ const GENRE_KEYWORDS: Record<string, string[]> = {
   lofi: ['lofi', 'lo-fi'],
   jazz: ['jazz', 'fusion'],
   blues: ['blues'],
-  punk: ['punk', 'hardcore punk'],
-  'hard rock': ['hard rock'],
-  'death metal': ['death metal', 'deathcore'],
-  'black metal': ['black metal'],
-  metalcore: ['metalcore'],
 };
+
+const GENRE_PARENT: Record<string, string> = {
+  'death metal': 'metal',
+  'black metal': 'metal',
+  metalcore: 'metal',
+  'hard rock': 'rock',
+  punk: 'rock',
+  house: 'electronic',
+  ambient: 'electronic',
+  rap: 'hip hop',
+};
+
+/**
+ * Returns false if the track's artist/title contains keywords of a genre
+ * that is unrelated to (not a parent/child of) the target genre.
+ */
+function isGenreCompatible(track: RecoTrack, targetGenre: string): boolean {
+  const text = `${track.artist} ${track.title}`.toLowerCase();
+  for (const [genre, keywords] of Object.entries(GENRE_KEYWORDS)) {
+    if (genre === targetGenre) continue;
+    if (GENRE_PARENT[genre] === targetGenre) continue;
+    if (GENRE_PARENT[targetGenre] === genre) continue;
+    if (keywords.some((kw) => text.includes(kw))) {
+      return false;
+    }
+  }
+  return true;
+}
 
 function normalizeText(value: string): string {
   return value
@@ -166,6 +207,26 @@ function youtubeThumbnailFallbackUrl(videoId: string): string {
   return `https://i.ytimg.com/vi/${videoId.trim()}/hqdefault.jpg`;
 }
 
+function normalizeDuration(duration: number | string | null | undefined): number | null {
+  if (duration == null) return null;
+  if (typeof duration === 'number') {
+    if (!Number.isFinite(duration) || duration <= 0) return null;
+    return duration > 86400 ? Math.round(duration / 1000) : Math.round(duration);
+  }
+  const trimmed = duration.trim();
+  if (!trimmed) return null;
+  if (/^\d+(\.\d+)?$/.test(trimmed)) {
+    const n = Number(trimmed);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    return n > 86400 ? Math.round(n / 1000) : Math.round(n);
+  }
+  const parts = trimmed.split(':').map((p) => Number(p.trim()));
+  if (parts.some((p) => !Number.isFinite(p) || p < 0)) return null;
+  if (parts.length === 2) return Math.round(parts[0]! * 60 + parts[1]!);
+  if (parts.length === 3) return Math.round(parts[0]! * 3600 + parts[1]! * 60 + parts[2]!);
+  return null;
+}
+
 function asRecoTrack(row: {
   trackId: string;
   title: string;
@@ -178,7 +239,7 @@ function asRecoTrack(row: {
     title: row.title,
     artist: row.artist,
     thumbnailUrl: row.thumbnailUrl ?? null,
-    duration: row.duration ?? null,
+    duration: normalizeDuration(row.duration),
   };
 }
 
@@ -201,6 +262,28 @@ function takeUniqueTracks(rows: RecoTrack[], limit: number): RecoTrack[] {
 
 function takeUniqueByTrackId(rows: RecoTrack[]): RecoTrack[] {
   return takeUniqueTracks(rows, Number.MAX_SAFE_INTEGER);
+}
+
+function seededShuffle<T>(arr: T[], seed: number): T[] {
+  const result = [...arr];
+  let s = seed;
+  for (let i = result.length - 1; i > 0; i--) {
+    s = ((s * 1103515245 + 12345) & 0x7fffffff) >>> 0;
+    const j = s % (i + 1);
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
+function takeUniqueTracksShuffled(rows: RecoTrack[], limit: number, seed: number): RecoTrack[] {
+  return takeUniqueTracks(seededShuffle(rows, seed), limit);
+}
+
+function isLikelyCompilation(track: RecoTrack): boolean {
+  const dur = Number(track.duration);
+  if (Number.isFinite(dur) && dur > 600) return true;
+  const title = (track.title ?? '').toLowerCase();
+  return ['top ', ' mix', 'stream', 'streaming', 'livestream', 'lofi', 'playlist', '24/7', 'radio', ' live', 'compilation', 'mega mix', 'non stop', 'greatest hits'].some((k) => title.includes(k));
 }
 
 function capArtists(rows: RecoTrack[], perArtistLimit: number, totalLimit: number): RecoTrack[] {
@@ -355,7 +438,7 @@ async function buildRadioRecommendations(params: {
     );
   }
 
-  const candidates = takeUniqueByTrackId(radios.flat()).filter((t) => !params.excludeTrackIds.has(t.trackId));
+  const candidates = takeUniqueByTrackId(radios.flat()).filter((t) => !params.excludeTrackIds.has(t.trackId) && !isLikelyCompilation(t));
   return capArtists(candidates, 2, params.totalLimit);
 }
 
@@ -432,50 +515,127 @@ async function getUserGenres(params: {
   return getPersonalizedFallbackGenres(userId);
 }
 
-async function buildGenreTrackBlocks(genres: string[]): Promise<Array<{ genre: string; tracks: RecoTrack[] }>> {
+async function buildGenreTrackBlocks(
+  genres: string[],
+  topArtists: string[],
+  varietySeed: number,
+  recommendedTracks?: RecoTrack[],
+  usedTrackIds?: Set<string>,
+  usedArtistNames?: Set<string>,
+): Promise<Array<{ genre: string; tracks: RecoTrack[] }>> {
   const slice = genres.slice(0, 3);
-  const blocks = await Promise.all(
-    slice.map(async (genre) => {
+  const blockUsedTrackIds = new Set(usedTrackIds);
+  const blockUsedArtists = new Set(usedArtistNames);
+
+  const recosByGenre = new Map<string, RecoTrack[]>();
+  if (recommendedTracks) {
+    for (const t of recommendedTracks) {
+      if (isLikelyCompilation(t)) continue;
+      for (const [genre, keywords] of Object.entries(GENRE_KEYWORDS)) {
+        if (keywords.some((k) => (t.artist + ' ' + t.title).toLowerCase().includes(k))) {
+          if (!recosByGenre.has(genre)) recosByGenre.set(genre, []);
+          recosByGenre.get(genre)!.push(t);
+          break;
+        }
+      }
+    }
+  }
+
+  const blocks: Array<{ genre: string; tracks: RecoTrack[] }> = [];
+  for (let idx = 0; idx < slice.length; idx++) {
+    const genre = slice[idx]!;
+    const buildBlock = async (): Promise<{ genre: string; tracks: RecoTrack[] } | null> => {
       try {
-        const bundle = await ytdlpService.search(`${genre} music`);
-        const tracks = takeUniqueTracks(bundle.tracks.map(asRecoTrack), PAGE_SIZE * (MAX_FORWARD_PAGES + 1));
+        const songs = await ytmusicService.searchSongs(`${genre} music`);
+        const limit = PAGE_SIZE * (MAX_FORWARD_PAGES + 1);
+        let pool = (songs ?? []).map(asRecoTrack).filter(
+          (t) => !isLikelyCompilation(t) && Number(t.duration) > 0 && isGenreCompatible(t, genre),
+        );
+        const recos = recosByGenre.get(genre) || [];
+        if (recos.length > 0) {
+          pool = [...recos.filter((r) => !pool.some((p) => p.trackId === r.trackId)), ...pool];
+        }
+        pool = pool.filter((t) => !blockUsedTrackIds.has(t.trackId) && !blockUsedArtists.has(t.artist.trim().toLowerCase()));
+        const tracks = takeUniqueTracksShuffled(pool, limit, varietySeed + idx);
         return tracks.length > 0 ? { genre, tracks } : null;
+      } catch {
+        try {
+          const songs = await ytmusicService.searchSongs(`${genre} music`);
+          const limit = PAGE_SIZE * (MAX_FORWARD_PAGES + 1);
+          let pool = (songs ?? []).map(asRecoTrack).filter(
+            (t) => !isLikelyCompilation(t) && isGenreCompatible(t, genre),
+          );
+          const recos = recosByGenre.get(genre) || [];
+          if (recos.length > 0) {
+            pool = [...recos.filter((r) => !pool.some((p) => p.trackId === r.trackId)), ...pool];
+          }
+          pool = pool.filter((t) => !blockUsedTrackIds.has(t.trackId) && !blockUsedArtists.has(t.artist.trim().toLowerCase()));
+          const tracks = takeUniqueTracksShuffled(pool, limit, varietySeed + idx);
+          return tracks.length > 0 ? { genre, tracks } : null;
+        } catch {
+          return null;
+        }
+      }
+    };
+    const block = await buildBlock();
+    if (block) {
+      for (const t of block.tracks) {
+        blockUsedTrackIds.add(t.trackId);
+        blockUsedArtists.add(t.artist.trim().toLowerCase());
+      }
+      blocks.push(block);
+    }
+  }
+  return blocks;
+}
+
+async function buildSimilarArtistBlocks(artists: string[]): Promise<Array<{ seedArtist: string; items: RecoArtist[] }>> {
+  const seeds = artists.slice(0, 3).filter((a) => a?.trim());
+  if (seeds.length === 0) return [];
+
+  const redis = getRedis();
+  const seenBrowseIds = new Set<string>();
+  const results = await Promise.all(
+    seeds.map(async (seed) => {
+      const cacheKey = `reco:similarTo:v2:${seed}`;
+      try {
+        const cached = await redis.get(cacheKey);
+        if (cached) {
+          const block = JSON.parse(cached) as { seedArtist: string; items: RecoArtist[] } | null;
+          if (block) {
+            block.items = block.items.filter((a) => a.browseId && !seenBrowseIds.has(a.browseId));
+            for (const a of block.items) seenBrowseIds.add(a.browseId);
+            return block.items.length > 0 ? block : null;
+          }
+        }
+      } catch {}
+
+      try {
+        const hits = await ytmusicService.searchArtists(seed);
+        const browseId = hits[0]?.browseId;
+        if (!browseId) return null;
+        const detail = await ytmusicService.getArtist(browseId);
+        const related = (detail?.relatedArtists ?? [])
+          .filter((row) => row.browseId && row.name && !seenBrowseIds.has(row.browseId))
+          .slice(0, PAGE_SIZE * (MAX_FORWARD_PAGES + 1))
+          .map((row) => ({
+            browseId: row.browseId,
+            name: row.name,
+            thumbnailUrl: row.thumbnailUrl,
+            subscribers: row.subscribers,
+          }));
+        if (related.length === 0) return null;
+        for (const a of related) seenBrowseIds.add(a.browseId);
+        const block = { seedArtist: seed, items: related };
+        redis.set(cacheKey, JSON.stringify(block), 'EX', 86400).catch(() => {});
+        return block;
       } catch {
         return null;
       }
     }),
   );
-  return blocks.filter((x): x is { genre: string; tracks: RecoTrack[] } => x !== null);
-}
 
-async function buildSimilarArtistBlocks(artists: string[]): Promise<Array<{ seedArtist: string; items: RecoArtist[] }>> {
-  const seed = artists[0]?.trim();
-  if (!seed) {
-    return [];
-  }
-  try {
-    const hits = await ytmusicService.searchArtists(seed);
-    const browseId = hits[0]?.browseId;
-    if (!browseId) {
-      return [];
-    }
-    const detail = await ytmusicService.getArtist(browseId);
-    const related = (detail?.relatedArtists ?? [])
-      .filter((row) => row.browseId && row.name)
-      .slice(0, PAGE_SIZE * (MAX_FORWARD_PAGES + 1))
-      .map((row) => ({
-        browseId: row.browseId,
-        name: row.name,
-        thumbnailUrl: row.thumbnailUrl,
-        subscribers: row.subscribers,
-      }));
-    if (related.length === 0) {
-      return [];
-    }
-    return [{ seedArtist: seed, items: related }];
-  } catch {
-    return [];
-  }
+  return results.filter((x): x is { seedArtist: string; items: RecoArtist[] } => x !== null);
 }
 
 function buildMixesForYou(artists: string[], genreBlocks: Array<{ genre: string; tracks: RecoTrack[] }>): HomeRecoResponse['mixesForYou'] {
@@ -501,60 +661,19 @@ function buildMixesForYou(artists: string[], genreBlocks: Array<{ genre: string;
   return mixes;
 }
 
-async function getSlotGenres(userId: number): Promise<string[]> {
-  const row = await AppDataSource.getRepository(UserMixPreferences).findOne({
-    where: { user: { id: userId } },
-  });
-  const slots = row?.slots ?? {};
-  const out: string[] = [];
-  for (const value of Object.values(slots)) {
-    if (!value || typeof value !== 'object') {
-      continue;
-    }
-    const genres = (value as { genres?: unknown }).genres;
-    if (!Array.isArray(genres)) {
-      continue;
-    }
-    for (const genre of genres) {
-      if (typeof genre !== 'string') continue;
-      const trimmed = genre.trim().toLowerCase();
-      if (!trimmed || out.includes(trimmed)) continue;
-      out.push(trimmed);
-      if (out.length >= 8) return out;
-    }
-  }
-  return out;
-}
-
-async function getPopularFallbackTracks(): Promise<RecoTrack[]> {
-  const candidates = ['top music 2026', 'youtube music hits', 'popular songs'];
-  for (const query of candidates) {
-    try {
-      const bundle = await ytdlpService.search(query);
-      const tracks = takeUniqueTracks(bundle.tracks.map(asRecoTrack), PAGE_SIZE * (MAX_FORWARD_PAGES + 1));
-      if (tracks.length > 0) {
-        return tracks;
-      }
-    } catch {
-      // Try next query.
-    }
-  }
-  return [];
-}
-
-async function buildGenreBasedFallback(genres: string[], limit: number): Promise<RecoTrack[]> {
-  const genreSlice = genres.slice(0, 4);
+async function getPopularFallbackTracks(varietySeed: number): Promise<RecoTrack[]> {
+  const candidates = ['top songs 2026', 'popular songs'];
   const results = await Promise.all(
-    genreSlice.map(async (genre) => {
+    candidates.map(async (query) => {
       try {
-        const bundle = await ytdlpService.search(`${genre} music`);
-        return takeUniqueTracks(bundle.tracks.map(asRecoTrack), 30);
+        const songs = await ytmusicService.searchSongs(query);
+        return (songs ?? []).map(asRecoTrack).filter((t) => !isLikelyCompilation(t));
       } catch {
-        return [];
+        return [] as RecoTrack[];
       }
     }),
   );
-  return takeUniqueTracks(results.flat(), limit);
+  return takeUniqueTracksShuffled(results.flat(), PAGE_SIZE * (MAX_FORWARD_PAGES + 1), varietySeed);
 }
 
 function toSearchRows(rows: RecoTrack[]): SearchResult[] {
@@ -584,154 +703,22 @@ function streamHomeRecoPayload(res: Response, payload: HomeRecoResponse): void {
   writeHomeNdjson(res, { kind: 'albumsForYou', items: payload.albumsForYou });
 }
 
-async function buildMixCardsForUser(params: {
-  userId: number;
-  hourBucket: string;
-  seedTracks: RecoTrack[];
-  recentTrackIds: Set<string>;
-  finalGenres: string[];
-}): Promise<HomeRecoResponse['mixesForYou']> {
-  const { userId, hourBucket, seedTracks, recentTrackIds, finalGenres } = params;
-  const totalMixTracks = PAGE_SIZE * (MAX_FORWARD_PAGES + 1);
-
-  const cards = await Promise.all(
-    [1, 2, 3].map(async (n) => {
-      const seedSlice = seedTracks.slice((n - 1) * 6, (n - 1) * 6 + 12);
-      let mixTracks: RecoTrack[] = [];
-
-      if (seedSlice.length > 0) {
-        mixTracks = await buildRadioRecommendations({
-          seedTracks: seedSlice,
-          excludeTrackIds: recentTrackIds,
-          totalLimit: totalMixTracks,
-        });
-      }
-
-      if (mixTracks.length === 0 && finalGenres.length > 0) {
-        const genre = finalGenres[(n - 1) % finalGenres.length];
-        const bundle = await ytdlpService.search(`${genre} music`);
-        mixTracks = takeUniqueTracks(bundle.tracks.map(asRecoTrack), totalMixTracks);
-      }
-
-      if (mixTracks.length === 0) {
-        return null;
-      }
-
-      const rows: MixTrackRow[] = mixTracks.map((t, idx) => ({
-        id: idx + 1,
-        trackId: t.trackId,
-        title: t.title,
-        artist: t.artist,
-        thumbnailUrl: t.thumbnailUrl,
-        duration: t.duration,
-      }));
-      const hydratedRows = await fillMissingTrackMedia(rows, 12);
-      try {
-        await getRedis().set(mixKey({ userId, hourBucket, n }), JSON.stringify(hydratedRows), 'EX', TTL_RECO_MIX_SEC);
-      } catch {
-        /* ignore */
-      }
-      const thumbs = hydratedRows
-        .map((r) => r.thumbnailUrl)
-        .filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
-        .slice(0, 4);
-      return {
-        id: `${hourBucket}-${n}`,
-        title: `Mix #${n}`,
-        subtitle: pickTopArtists(hydratedRows, 4).join(', '),
-        thumbnailUrl: thumbs[0] ?? null,
-        artists: pickTopArtists(hydratedRows, 4),
-        previewThumbs: thumbs,
-      };
-    }),
-  );
-  return cards.filter((x): x is NonNullable<(typeof cards)[number]> => x !== null);
-}
-
-async function buildRegeneratedMixes(params: {
-  userId: number;
-  hourBucket: string;
-  seedTracks: RecoTrack[];
-}): Promise<HomeRecoResponse['mixesForYou']> {
-  const { userId, hourBucket, seedTracks } = params;
-  const genres = await extractGenresFromTracks(seedTracks);
-  const usedIds = new Set<string>(seedTracks.map((t) => t.trackId));
-
-  const shuffledGenres = [...genres];
-  const seed = userId;
-  for (let i = shuffledGenres.length - 1; i > 0; i--) {
-    let s = (seed * 1103515245 + i * 1664525) & 0x7fffffff;
-    const j = s % (i + 1);
-    [shuffledGenres[i], shuffledGenres[j]] = [shuffledGenres[j], shuffledGenres[i]];
-  }
-
-  const cards: HomeRecoResponse['mixesForYou'] = [];
-  for (let n = 1; n <= 3; n++) {
-    const genre = shuffledGenres[(n - 1) % shuffledGenres.length] || 'mix';
-    const bundle = await ytdlpService.search(`${genre} music`);
-    let mixTracks = takeUniqueTracks(
-      bundle.tracks.map(asRecoTrack).filter((t) => !usedIds.has(t.trackId)),
-      PAGE_SIZE * (MAX_FORWARD_PAGES + 1),
-    );
-
-    if (mixTracks.length < 6) {
-      const fallbackBundle = await ytdlpService.search(`best ${genre} songs 2025`);
-      const fallbackTracks = takeUniqueTracks(
-        fallbackBundle.tracks.map(asRecoTrack).filter((t) => !usedIds.has(t.trackId)),
-        PAGE_SIZE * (MAX_FORWARD_PAGES + 1),
-      );
-      mixTracks = [...mixTracks, ...fallbackTracks];
-    }
-
-    for (const t of mixTracks) {
-      usedIds.add(t.trackId);
-    }
-
-    const rows: MixTrackRow[] = mixTracks.map((t, idx) => ({
-      id: idx + 1,
-      trackId: t.trackId,
-      title: t.title,
-      artist: t.artist,
-      thumbnailUrl: t.thumbnailUrl,
-      duration: t.duration,
-    }));
-    const hydratedRows = await fillMissingTrackMedia(rows, 12);
-    try {
-      await getRedis().set(mixKey({ userId, hourBucket, n }), JSON.stringify(hydratedRows), 'EX', TTL_RECO_MIX_SEC);
-    } catch {
-      /* ignore */
-    }
-    const thumbs = hydratedRows
-      .map((r) => r.thumbnailUrl)
-      .filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
-      .slice(0, 4);
-    cards.push({
-      id: `regen-${hourBucket}-${n}`,
-      title: `Mix #${n}`,
-      subtitle: pickTopArtists(hydratedRows, 4).join(', '),
-      thumbnailUrl: thumbs[0] ?? null,
-      artists: pickTopArtists(hydratedRows, 4),
-      previewThumbs: thumbs,
-    });
-  }
-  return cards;
-}
-
 async function buildAlbumsBlock(params: {
   topArtists: string[];
   recommendedTracks: RecoTrack[];
+  userId?: number;
 }): Promise<RecoAlbum[]> {
   const { topArtists, recommendedTracks } = params;
   const albumsForYou: RecoAlbum[] = [];
   const maxAlbums = PAGE_SIZE * (MAX_FORWARD_PAGES + 1);
+  const seenArtistNames = new Set<string>();
 
   const pushUnique = (row: { browseId: string; title: string; artist: string; thumbnailUrl: string; year: string }) => {
-    if (!row.browseId || !row.title) {
-      return;
-    }
-    if (albumsForYou.some((a) => a.browseId === row.browseId)) {
-      return;
-    }
+    if (!row.browseId || !row.title) return;
+    if (albumsForYou.some((a) => a.browseId === row.browseId)) return;
+    const artistNorm = (row.artist ?? '').trim().toLowerCase();
+    if (!artistNorm || seenArtistNames.has(artistNorm)) return;
+    seenArtistNames.add(artistNorm);
     albumsForYou.push({
       browseId: row.browseId,
       title: row.title,
@@ -741,42 +728,11 @@ async function buildAlbumsBlock(params: {
     });
   };
 
-  const batchTop = await ytmusicService.searchAlbumsBatch(topArtists.slice(0, 4));
+  const batchTop = await ytmusicService.searchAlbumsBatch(topArtists.slice(0, 8));
   for (const pack of batchTop) {
     for (const row of (pack.albums ?? []).slice(0, 3)) {
       pushUnique(row);
-      if (albumsForYou.length >= maxAlbums) {
-        return albumsForYou;
-      }
-    }
-  }
-
-  const topArtistSet = new Set<string>(topArtists.map((a) => normalizeText(a)));
-  const seedArtist = topArtists[0];
-  if (seedArtist && albumsForYou.length < maxAlbums) {
-    try {
-      const hits = await ytmusicService.searchArtists(seedArtist);
-      const seedBrowseId = hits[0]?.browseId;
-      if (seedBrowseId) {
-        const detail = await ytmusicService.getArtist(seedBrowseId);
-        const related = (detail?.relatedArtists ?? []).slice(0, 8);
-        const relNames = related
-          .map((r) => r.name?.trim())
-          .filter((n): n is string => !!n && !topArtistSet.has(normalizeText(n)));
-        if (relNames.length > 0) {
-          const relBatch = await ytmusicService.searchAlbumsBatch(relNames.slice(0, 8));
-          for (const pack of relBatch) {
-            for (const row of (pack.albums ?? []).slice(0, 2)) {
-              pushUnique(row);
-              if (albumsForYou.length >= maxAlbums) {
-                return albumsForYou;
-              }
-            }
-          }
-        }
-      }
-    } catch {
-      // best effort
+      if (albumsForYou.length >= maxAlbums) return albumsForYou;
     }
   }
 
@@ -786,30 +742,24 @@ async function buildAlbumsBlock(params: {
       if (fallbackArtists.length > 0) {
         const fbBatch = await ytmusicService.searchAlbumsBatch(fallbackArtists);
         for (const pack of fbBatch) {
-          for (const row of (pack.albums ?? []).slice(0, 3)) {
-            pushUnique(row);
-          }
+          for (const row of (pack.albums ?? []).slice(0, 3)) pushUnique(row);
         }
       }
-      if (albumsForYou.length === 0) {
-        const bundles = await ytdlpService.search('popular metal albums');
-        if (bundles.tracks.length > 0) {
-          const rows = await ytmusicService.searchAlbums(bundles.tracks[0].artist);
-          for (const row of rows.slice(0, PAGE_SIZE)) {
-            pushUnique(row);
-          }
-        }
+      if (albumsForYou.length === 0 && params.userId) {
+        const fallbackGenres = getPersonalizedFallbackGenres(params.userId);
+        const genreIdx = (params.userId * 7 + new Date().getUTCHours()) % fallbackGenres.length;
+        const genre = fallbackGenres[genreIdx] || 'pop';
+        const rows = await ytmusicService.searchAlbums(`${genre}`);
+        for (const row of rows.slice(0, PAGE_SIZE)) pushUnique(row);
       }
-    } catch {
-      /* empty ok */
-    }
+    } catch {}
   }
 
   return albumsForYou;
 }
 
 async function buildHomeRecoPayload(userId: number): Promise<HomeRecoResponse> {
-  const [historyRows, favoriteRows, playlistRows, tagRows, slotGenres] = await Promise.all([
+  const [historyRows, favoriteRows, playlistRows, tagRows] = await Promise.all([
     AppDataSource.getRepository(ListenHistory).find({
       where: { user: { id: userId } },
       order: { listenedAt: 'DESC' },
@@ -832,7 +782,6 @@ async function buildHomeRecoPayload(userId: number): Promise<HomeRecoResponse> {
       order: { addedAt: 'DESC' },
       take: 120,
     }),
-    getSlotGenres(userId),
   ]);
 
   const recommendedPool: RecoTrack[] = [
@@ -852,6 +801,7 @@ async function buildHomeRecoPayload(userId: number): Promise<HomeRecoResponse> {
   const hasHistory = historyRows.length > 0 || favoriteRows.length > 0 || playlistRows.length > 0;
   const seedTracks = takeUniqueTracks(recommendedPool, 40);
   const topArtists = pickTopArtists(seedTracks, MAX_TOP_ARTISTS);
+  const varietySeed = (userId * 31 + Number(hourBucketUtc())) >>> 0;
 
   const radioPromise = seedTracks.length > 0
     ? buildRadioRecommendations({
@@ -867,9 +817,9 @@ async function buildHomeRecoPayload(userId: number): Promise<HomeRecoResponse> {
   const [radioResult, similarTo, albumsForYou, fallbackTracks, popularTracks] = await Promise.all([
     radioPromise,
     buildSimilarArtistBlocks(topArtists).catch(() => [] as SimilarBlock[]),
-    buildAlbumsBlock({ topArtists, recommendedTracks: [] }).catch(() => [] as RecoAlbum[]),
+    buildAlbumsBlock({ topArtists, recommendedTracks: [], userId }).catch(() => [] as RecoAlbum[]),
     Promise.resolve(takeUniqueTracks(recommendedPool, PAGE_SIZE * (MAX_FORWARD_PAGES + 1))),
-    getPopularFallbackTracks().catch(() => [] as RecoTrack[]),
+    getPopularFallbackTracks(varietySeed).catch(() => [] as RecoTrack[]),
   ]);
 
   let recommendedTracks: RecoTrack[] = radioResult;
@@ -878,14 +828,22 @@ async function buildHomeRecoPayload(userId: number): Promise<HomeRecoResponse> {
     recommendedTracks = takeUniqueTracks([...recommendedTracks, ...fallbackTracks, ...popularTracks], PAGE_SIZE * (MAX_FORWARD_PAGES + 1));
   }
 
+  recommendedTracks = await fillMissingTrackMedia(recommendedTracks, PAGE_SIZE * (MAX_FORWARD_PAGES + 1));
+
   const finalGenres = await getUserGenres({ userId, hasHistory, recommendedTracks, albumsForYou });
 
+  const recoTrackIds = new Set(recommendedTracks.map((t) => t.trackId));
+  const recoArtistNames = new Set(recommendedTracks.map((t) => t.artist.trim().toLowerCase()));
+
   const [byGenre, mixesForYou] = await Promise.all([
-    buildGenreTrackBlocks(finalGenres).catch(() => [] as GenreBlock[]),
-    buildMixCardsForUser({ userId, hourBucket: hourBucketUtc(), seedTracks, recentTrackIds, finalGenres }).catch(() => []),
+    buildGenreTrackBlocks(finalGenres, topArtists, varietySeed, recommendedTracks, recoTrackIds, recoArtistNames).catch(() => [] as GenreBlock[]),
+    buildRegeneratedMixesFast({ userId, hourBucket: hourBucketUtc(), genres: finalGenres, usedIds: recentTrackIds, varietySeed }).catch(() => []),
   ]);
 
-  const hydrated = await fillMissingTrackMedia(recommendedTracks, 12);
+  const hydrated = recommendedTracks.map((t) => ({
+    ...t,
+    thumbnailUrl: t.thumbnailUrl || (isYoutubeVideoId(t.trackId) ? youtubeThumbnailFallbackUrl(t.trackId) : null),
+  }));
 
   return {
     generatedAt: new Date().toISOString(),
@@ -960,6 +918,74 @@ export async function getRecoHome(req: Request, res: Response) {
   }
 }
 
+async function buildRegeneratedMixesFast(params: {
+  userId: number;
+  hourBucket: string;
+  genres: string[];
+  usedIds: Set<string>;
+  varietySeed?: number;
+}): Promise<HomeRecoResponse['mixesForYou']> {
+  const { userId, hourBucket, genres, usedIds, varietySeed = 0 } = params;
+  const totalMixTracks = PAGE_SIZE * (MAX_FORWARD_PAGES + 1);
+
+  let mixGenres = genres.slice(0, 3);
+  while (mixGenres.length < 3 && genres.length > 0) {
+    mixGenres.push(genres[mixGenres.length % genres.length]);
+  }
+  if (mixGenres.length === 0) {
+    mixGenres = ['pop', 'rock', 'electronic'];
+  }
+
+  const rawResults = await Promise.all(
+    mixGenres.map(async (genre) => {
+      try {
+        return await ytmusicService.searchSongs(`${genre} music`);
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  const allTracks = rawResults.filter((x): x is NonNullable<(typeof rawResults)[number]> => x != null).flat().map(asRecoTrack).filter((t) => !isLikelyCompilation(t));
+  const seen = new Set<string>(usedIds);
+
+  const cards: HomeRecoResponse['mixesForYou'] = [];
+  for (let n = 0; n < Math.min(rawResults.length, 3); n++) {
+    const genreTracks = (rawResults[n] ?? []).map(asRecoTrack).filter((t) => !isLikelyCompilation(t));
+    let mixTracks = takeUniqueTracksShuffled(genreTracks.filter((t) => !seen.has(t.trackId)), totalMixTracks, varietySeed + n);
+    if (mixTracks.length < 6) {
+      const extras = allTracks.filter((t) => !seen.has(t.trackId));
+      mixTracks = takeUniqueTracksShuffled([...mixTracks, ...extras], totalMixTracks, varietySeed + n * 7);
+    }
+    if (mixTracks.length < 3) continue;
+
+    for (const t of mixTracks) { usedIds.add(t.trackId); seen.add(t.trackId); }
+
+    const rows: MixTrackRow[] = mixTracks.map((t, idx) => ({
+      id: idx + 1,
+      trackId: t.trackId,
+      title: t.title,
+      artist: t.artist,
+      thumbnailUrl: t.thumbnailUrl || (isYoutubeVideoId(t.trackId) ? youtubeThumbnailFallbackUrl(t.trackId) : null),
+      duration: t.duration ?? null,
+    }));
+
+    getRedis().set(mixKey({ userId, hourBucket, n: n + 1 }), JSON.stringify(rows), 'EX', TTL_RECO_MIX_SEC).catch(() => {});
+
+    const thumbs = rows.filter((r) => r.thumbnailUrl).map((r) => r.thumbnailUrl as string).slice(0, 4);
+    cards.push({
+      id: `${hourBucket}-${n + 1}`,
+      title: `Mix #${n + 1}`,
+      subtitle: pickTopArtists(rows, 4).join(', '),
+      thumbnailUrl: thumbs[0] ?? null,
+      artists: pickTopArtists(rows, 4),
+      previewThumbs: thumbs,
+    });
+  }
+
+  return cards;
+}
+
 export async function regenerateMixes(req: Request, res: Response) {
   const userId = req.user?.id;
   if (userId === undefined) {
@@ -973,6 +999,26 @@ export async function regenerateMixes(req: Request, res: Response) {
   recoHomeInflightRefreshV2.delete(cacheKey);
 
   try {
+    const existingMixes: HomeRecoResponse['mixesForYou'] = [];
+    for (let n = 1; n <= 3; n++) {
+      const raw = await redis.get(mixKey({ userId, hourBucket: hb, n }));
+      if (raw) {
+        const rows = JSON.parse(raw) as MixTrackRow[];
+        const thumbs = rows.filter((r) => r.thumbnailUrl).map((r) => r.thumbnailUrl as string).slice(0, 4);
+        existingMixes.push({
+          id: `${hb}-${n}`,
+          title: `Mix #${n}`,
+          subtitle: pickTopArtists(rows, 4).join(', '),
+          thumbnailUrl: thumbs[0] ?? null,
+          artists: pickTopArtists(rows, 4),
+          previewThumbs: thumbs,
+        });
+      }
+    }
+    if (existingMixes.length === 3) {
+      return res.json({ mixes: existingMixes });
+    }
+
     const [favRows, historyRows, tagRows] = await Promise.all([
       AppDataSource.getRepository(FavoriteTrack).find({
         where: { user: { id: userId } },
@@ -991,10 +1037,10 @@ export async function regenerateMixes(req: Request, res: Response) {
       }),
     ]);
 
-    const recentTrackIds = new Set<string>();
+    const usedIds = new Set<string>();
     for (const row of historyRows.slice(0, 30)) {
       const id = (row.trackId ?? '').trim();
-      if (id) recentTrackIds.add(id);
+      if (id) usedIds.add(id);
     }
 
     const seedTracks = takeUniqueTracks(
@@ -1004,8 +1050,8 @@ export async function regenerateMixes(req: Request, res: Response) {
 
     const finalGenres = await getUserGenres({ userId, hasHistory: true, recommendedTracks: seedTracks, albumsForYou: [] });
 
-    const mixes = await buildMixCardsForUser({ userId, hourBucket: hb, seedTracks, recentTrackIds, finalGenres });
-    console.log('[regenerateMixes] seedTracks count:', seedTracks.length, 'genres:', finalGenres, 'mixes count:', mixes.length);
+    const mixes = await buildRegeneratedMixesFast({ userId, hourBucket: hb, genres: finalGenres, usedIds, varietySeed: (userId * 31 + Number(hb)) >>> 0 });
+    console.log('[regenerateMixes] fast mixes count:', mixes.length);
 
     return res.json({ mixes });
   } catch (err) {

@@ -41,6 +41,10 @@ function makeApp() {
   return app;
 }
 
+beforeEach(() => {
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+});
+
 describe('GET /api/search/albums', () => {
   beforeEach(() => { vi.clearAllMocks(); });
 

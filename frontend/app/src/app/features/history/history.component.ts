@@ -8,6 +8,7 @@ import {
 } from '../../core/services/listen-history-cache.service';
 import { PlayerService, type PlayerTrack } from '../../core/services/player.service';
 import { AppTrack } from '../../shared/models/track.model';
+import { normalizeDurationSeconds } from '../../shared/utils/duration.util';
 import { TrackCardComponent } from '../../shared/components/track-card/track-card.component';
 import { TranslatePipe } from '../../shared/pipes/t.pipe';
 import { AppSettingsService } from '../../core/services/app-settings.service';
@@ -180,6 +181,7 @@ export class HistoryComponent {
       title: row.title,
       artist: row.artist,
       thumbnailUrl: row.thumbnailUrl,
+      duration: normalizeDurationSeconds(row.duration) ?? undefined,
     };
   }
 

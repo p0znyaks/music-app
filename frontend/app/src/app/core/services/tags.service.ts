@@ -14,10 +14,12 @@ export class TagsService {
 
   private readonly changed$ = new BehaviorSubject(0);
 
-  invalidate(): void {
+  invalidate(shouldFetch = true): void {
     this.trackTagsCache.clear();
     this.distinctCache.clear();
-    this.changed$.next(this.changed$.value + 1);
+    if (shouldFetch) {
+      this.changed$.next(this.changed$.value + 1);
+    }
   }
 
   /** Теги трека (уникальные, как сохранены на сервере). */

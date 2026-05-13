@@ -33,4 +33,8 @@ export class SearchRouteReuseStrategy implements RouteReuseStrategy {
   shouldReuseRoute(future: ActivatedRouteSnapshot, curr: ActivatedRouteSnapshot): boolean {
     return future.routeConfig === curr.routeConfig;
   }
+
+  clearCache(): void {
+    this.cachedSearchHandle = null;
+  }
 }

@@ -51,7 +51,6 @@ interface PlaylistRow {
                   <div class="cover ph" aria-hidden="true"></div>
                 }
               }
-              <button type="button" class="del tap" (click)="askDelete($event, p)" [title]="'delete' | t">🗑️</button>
             </div>
 
             <div class="p-name" title="{{ p.name }}">{{ p.name }}</div>
@@ -60,42 +59,6 @@ interface PlaylistRow {
         }
       </div>
     </div>
-
-    @if (confirming()) {
-      <div class="modal-backdrop" (click)="cancelDelete()">
-        <div class="modal" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
-          <div class="modal-title">{{ 'deletePlaylistTitle' | t }}</div>
-          <div class="modal-text">
-            {{ 'deletePlaylistTextPrefix' | t }} <b>{{ confirmingName() }}</b> {{ 'deletePlaylistTextSuffix' | t }}
-          </div>
-
-          <div class="modal-text">
-            {{ 'typeDeleteToConfirm' | t }}
-          </div>
-
-          <input
-            class="modal-inp"
-            type="text"
-            [(ngModel)]="confirmText"
-            placeholder="DELETE"
-            autocomplete="off"
-            (keydown.escape)="cancelDelete()"
-          />
-
-          <div class="modal-actions">
-            <button type="button" class="btn ghost tap" (click)="cancelDelete()">{{ 'cancel' | t }}</button>
-            <button
-              type="button"
-              class="btn danger tap"
-              [disabled]="confirmText.trim() !== 'DELETE'"
-              (click)="confirmDelete()"
-            >
-              {{ 'delete' | t }}
-            </button>
-          </div>
-        </div>
-      </div>
-    }
   `,
   styles: `
     .page {
@@ -239,75 +202,9 @@ interface PlaylistRow {
       -webkit-line-clamp: 2;
       -webkit-box-orient: vertical;
     }
-    .del {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      border: none;
-      background: rgba(0, 0, 0, 0.35);
-      backdrop-filter: blur(6px);
-      cursor: pointer;
-      font-size: 1rem;
-      padding: 0.35rem 0.45rem;
-      border-radius: 10px;
-      opacity: 0.9;
-      transition: transform 0.12s ease;
-    }
-    .del:hover {
-      opacity: 1;
-    }
-    .del.tap:active {
-      transform: scale(0.88);
-    }
     .meta {
       font-size: 0.85rem;
       color: var(--accent-dim);
-    }
-
-    .modal-backdrop {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.55);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 1.25rem;
-      z-index: 1000;
-    }
-    .modal {
-      width: min(520px, 100%);
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 1rem;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
-    }
-    .modal-title {
-      font-size: 1.1rem;
-      font-weight: 800;
-      margin-bottom: 0.5rem;
-    }
-    .modal-text {
-      color: var(--accent-dim);
-      font-size: 0.9rem;
-      line-height: 1.35;
-      margin-bottom: 0.65rem;
-    }
-    .modal-inp {
-      width: 100%;
-      padding: 0.6rem 0.75rem;
-      border-radius: 10px;
-      border: 1px solid var(--border);
-      background: var(--bg);
-      color: var(--text, inherit);
-      font-weight: 800;
-      letter-spacing: 0.04em;
-      margin: 0.15rem 0 0.9rem;
-    }
-    .modal-actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: 0.5rem;
     }
   `,
 })
@@ -320,11 +217,6 @@ export class PlaylistsComponent {
   readonly playlists = signal<PlaylistRow[]>([]);
   readonly creating = signal(false);
   newName = '';
-  readonly confirming = signal(false);
-  readonly confirmingId = signal<number | null>(null);
-  readonly confirmingName = signal<string>('');
-  confirmText = '';
-
   constructor() {
     this.load();
   }
@@ -420,39 +312,4 @@ export class PlaylistsComponent {
     void this.router.navigate(['/playlists', p.id], { state: { name: p.name } });
   }
 
-  askDelete(ev: Event, p: PlaylistRow): void {
-    ev.stopPropagation();
-    this.confirming.set(true);
-    this.confirmingId.set(p.id);
-    this.confirmingName.set(p.name);
-    this.confirmText = '';
-  }
-
-  cancelDelete(): void {
-    this.confirming.set(false);
-    this.confirmingId.set(null);
-    this.confirmingName.set('');
-    this.confirmText = '';
-  }
-
-  confirmDelete(): void {
-    const id = this.confirmingId();
-    if (id === null) {
-      this.cancelDelete();
-      return;
-    }
-    if (this.confirmText.trim() !== 'DELETE') {
-      return;
-    }
-    this.api.delete(`playlists/${id}`).subscribe({
-      next: () => {
-        this.cancelDelete();
-        this.load();
-      },
-      error: () => {
-        // keep modal open so user can retry; reset input
-        this.confirmText = '';
-      },
-    });
-  }
 }

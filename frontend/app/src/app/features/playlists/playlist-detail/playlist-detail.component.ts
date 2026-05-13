@@ -1,7 +1,9 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
+import { catchError, forkJoin, map, of } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
 import { BackNavigationService } from '../../../core/services/back-navigation.service';
 import { PlayerService, type PlayerTrack } from '../../../core/services/player.service';
@@ -16,12 +18,15 @@ import { AppSettingsService } from '../../../core/services/app-settings.service'
 @Component({
   selector: 'app-playlist-detail',
   standalone: true,
-  imports: [CommonModule, TrackCardComponent, ModalComponent, TranslatePipe],
+  imports: [CommonModule, FormsModule, TrackCardComponent, ModalComponent, TranslatePipe],
   template: `
     <div class="page">
       <div class="head">
         <button type="button" class="back tap" (click)="back()">← {{ 'back' | t }}</button>
         <h1>{{ title() }}</h1>
+        @if (!isMix()) {
+          <button type="button" class="del-btn tap" (click)="askDelete()">{{ 'deletePlaylist' | t }}</button>
+        }
       </div>
 
       <div class="playlist-meta">
@@ -61,6 +66,19 @@ import { AppSettingsService } from '../../../core/services/app-settings.service'
         }
       </div>
     </div>
+
+    @if (confirming()) {
+      <div class="modal-backdrop" (click)="cancelDelete()">
+        <div class="modal" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+          <div class="modal-title">{{ 'deletePlaylistTitle' | t }}</div>
+          <div class="modal-text">{{ 'deletePlaylistConfirm' | t }}</div>
+          <div class="modal-actions">
+            <button type="button" class="btn ghost tap" (click)="cancelDelete()">{{ 'no' | t }}</button>
+            <button type="button" class="btn danger tap" (click)="confirmDelete()">{{ 'yes' | t }}</button>
+          </div>
+        </div>
+      </div>
+    }
 
     <app-modal [title]="'trackHasTags' | t" [isOpen]="confirmOpen()" (closed)="confirmOpen.set(false)">
       <p>{{ 'removeTrackWithTagsConfirm' | t }}</p>
@@ -155,6 +173,16 @@ import { AppSettingsService } from '../../../core/services/app-settings.service'
       border-radius: 8px;
       cursor: pointer;
       font-size: 0.85rem;
+      transition:
+        background 0.2s ease,
+        border-color 0.2s ease,
+        color 0.2s ease,
+        transform 0.12s ease;
+    }
+    .back:hover {
+      background: var(--bg-hover);
+      border-color: var(--accent-dim);
+      color: var(--accent);
     }
     .list {
       display: flex;
@@ -220,6 +248,97 @@ import { AppSettingsService } from '../../../core/services/app-settings.service'
       gap: 10px;
       margin-top: 12px;
     }
+
+    .del-btn {
+      padding: 0.55rem 1rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+      color: var(--text);
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition:
+        background 0.2s ease,
+        border-color 0.2s ease,
+        transform 0.12s ease;
+      flex-shrink: 0;
+    }
+    .del-btn:hover {
+      background: var(--bg-hover);
+      border-color: var(--accent-dim);
+    }
+    .del-btn.tap:active {
+      transform: scale(0.96);
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.55);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.25rem;
+      z-index: 1000;
+    }
+    .modal {
+      width: min(520px, 100%);
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1rem;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+    }
+    .modal-title {
+      font-size: 1.1rem;
+      font-weight: 800;
+      margin-bottom: 0.5rem;
+    }
+    .modal-text {
+      color: var(--accent-dim);
+      font-size: 0.9rem;
+      line-height: 1.35;
+      margin-bottom: 0.65rem;
+    }
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.5rem;
+    }
+    .btn {
+      padding: 0.5rem 0.85rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      font-size: 0.85rem;
+      transition:
+        background 0.2s ease,
+        border-color 0.2s ease,
+        color 0.2s ease,
+        transform 0.12s ease;
+    }
+    .btn.ghost {
+      background: transparent;
+      color: var(--accent-dim);
+    }
+    .btn.ghost:hover {
+      background: var(--bg-hover);
+      color: var(--accent);
+    }
+    .btn.danger {
+      background: #ef4444;
+      border-color: #ef4444;
+      color: #0b0b0c;
+      font-weight: 700;
+    }
+    .btn.danger:hover {
+      background: #dc2626;
+      border-color: #dc2626;
+    }
+    .btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
   `,
 })
 export class PlaylistDetailComponent {
@@ -257,6 +376,8 @@ export class PlaylistDetailComponent {
     const totalSec = this.tracks().reduce((sum, row) => sum + (normalizeDurationSeconds(row.duration) ?? 0), 0);
     return formatDurationCompact(totalSec);
   });
+
+  readonly confirming = signal(false);
 
   constructor() {
     const id = this.route.snapshot.paramMap.get('id');
@@ -328,6 +449,28 @@ export class PlaylistDetailComponent {
         this.tracks.set(list);
         if (this.title() === this.playlistBaseTitle() && !history.state?.name) {
           this.title.set(`${this.settings.t('playlists')} #${pid}`);
+        }
+        const missing = list.filter((t) => t.duration == null).slice(0, 10);
+        if (missing.length > 0) {
+          forkJoin(
+            missing.map((t) =>
+              this.api.get<{ duration: number }>(`tracks/${encodeURIComponent(t.trackId)}/metadata`).pipe(
+                map((meta) => {
+                  const d = normalizeDurationSeconds(meta.duration);
+                  return d != null ? { index: list.indexOf(t), duration: d } : null;
+                }),
+                catchError(() => of(null)),
+              ),
+            ),
+          ).subscribe((results) => {
+            const updated = [...this.tracks()];
+            for (const r of results) {
+              if (r) {
+                updated[r.index] = { ...updated[r.index], duration: r.duration };
+              }
+            }
+            this.tracks.set(updated);
+          });
         }
       },
     });
@@ -459,5 +602,26 @@ toAppTrack(row: {
       return;
     }
     this.backNavigation.back('/playlists');
+  }
+
+  askDelete(): void {
+    this.confirming.set(true);
+  }
+
+  cancelDelete(): void {
+    this.confirming.set(false);
+  }
+
+  confirmDelete(): void {
+    const pid = this.playlistId();
+    this.api.delete(`playlists/${pid}`).subscribe({
+      next: () => {
+        this.cancelDelete();
+        void this.router.navigate(['/playlists']);
+      },
+      error: () => {
+        this.cancelDelete();
+      },
+    });
   }
 }

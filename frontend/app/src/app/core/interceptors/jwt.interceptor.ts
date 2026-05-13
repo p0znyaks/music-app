@@ -18,9 +18,9 @@ export const jwtInterceptor: HttpInterceptorFn = (req, next) => {
   return next(authReq).pipe(
     catchError((err) => {
       if (err instanceof HttpErrorResponse && err.status === 401) {
-        // не трогаем попытку входа — там 401 = неверный пароль
         const isLoginAttempt = req.url.includes('auth/login');
-        if (!isLoginAttempt) {
+        const isAlreadyOnLogin = router.url.includes('/login');
+        if (!isLoginAttempt && !isAlreadyOnLogin) {
           auth.logout();
           void router.navigate(['/login']);
         }

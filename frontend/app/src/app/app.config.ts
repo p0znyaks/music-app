@@ -12,7 +12,8 @@ export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     provideRouter(routes),
-    { provide: RouteReuseStrategy, useClass: SearchRouteReuseStrategy },
+    SearchRouteReuseStrategy,
+    { provide: RouteReuseStrategy, useExisting: SearchRouteReuseStrategy },
     provideHttpClient(withInterceptors([jwtInterceptor, rateLimitInterceptor])),
     {
       provide: APP_INITIALIZER,

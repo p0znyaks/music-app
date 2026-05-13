@@ -954,6 +954,26 @@ def do_reco_albums_batch(queries: List[str]) -> dict:
     return {"results": out}
 
 
+def do_search_songs(query: str) -> List[dict]:
+    results = safe_search(query, "songs", 40)
+    out = []
+    for r in results or []:
+        vid = r.get("videoId", "")
+        if not vid:
+            continue
+        dur = r.get("duration_seconds") or 0
+        if not isinstance(dur, (int, float)) or dur <= 0:
+            continue
+        out.append({
+            "trackId": vid,
+            "title": r.get("title", ""),
+            "artist": r["artists"][0]["name"] if r.get("artists") else "",
+            "thumbnailUrl": r["thumbnails"][-1]["url"] if r.get("thumbnails") else "",
+            "duration": dur,
+        })
+    return out
+
+
 def do_search_tracks(q: str) -> List[dict]:
     main_url = f"ytsearch{YT_SEARCH_MAIN}:{q}"
     try:
@@ -1006,6 +1026,9 @@ def handle_command_sync(cmd: dict) -> dict:
         if action == "reco_albums_batch":
             qs = args.get("queries") or []
             return {"id": req_id, "ok": True, "data": do_reco_albums_batch(list(qs))}
+        if action == "search_songs":
+            q = (args.get("query") or "").strip()
+            return {"id": req_id, "ok": True, "data": do_search_songs(q)}
         if action == "search_tracks":
             q = (args.get("query") or "").strip()
             return {"id": req_id, "ok": True, "data": do_search_tracks(q)}

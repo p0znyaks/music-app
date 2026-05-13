@@ -149,13 +149,13 @@ export type YtmAlbumsBatchResultItem = {
 };
 
 async function runYtmusicJson<T>(
-  action: 'search_albums' | 'search_artists' | 'get_album' | 'get_artist' | 'get_watch_playlist_radio' | 'get_song',
+  action: 'search_albums' | 'search_artists' | 'search_songs' | 'get_album' | 'get_artist' | 'get_watch_playlist_radio' | 'get_song',
   arg: string,
   extra?: { limit?: number },
 ): Promise<T> {
   const callOnce = async (): Promise<T> => {
     const pool = requirePool();
-    if (action === 'search_albums' || action === 'search_artists') {
+    if (action === 'search_albums' || action === 'search_artists' || action === 'search_songs') {
       return ytmLimiter.use(() => pool.call<T>(action, { query: arg }));
     }
     if (action === 'get_watch_playlist_radio') {
@@ -227,6 +227,14 @@ export class YtmusicService {
     }
     return this.cachedJsonSWR<YtmArtistSearchHit[]>(`ytm_artists:v5:${q}`, TTL_SEARCH_SEC, () =>
       runYtmusicJson<YtmArtistSearchHit[]>('search_artists', q),
+    );
+  }
+
+  async searchSongs(query: string): Promise<YtmRadioTrack[]> {
+    const q = this.normalizeQuery(query);
+    if (!q) return [];
+    return this.cachedJsonSWR<YtmRadioTrack[]>(`ytm_songs:v2:${q}`, TTL_SEARCH_SEC, () =>
+      runYtmusicJson<YtmRadioTrack[]>('search_songs', q),
     );
   }
 

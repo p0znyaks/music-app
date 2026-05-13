@@ -4,6 +4,7 @@ import { ApiService } from './api.service';
 import { FavoritesService } from './favorites.service';
 import { PlayerService } from './player.service';
 import { TagsService } from './tags.service';
+import { SearchRouteReuseStrategy } from '../router/search-route-reuse.strategy';
 
 const TOKEN_KEY = 'muze_token';
 
@@ -26,6 +27,7 @@ export class AuthService {
   private readonly favorites = inject(FavoritesService);
   private readonly player = inject(PlayerService);
   private readonly tags = inject(TagsService);
+  private readonly searchRouteReuse = inject(SearchRouteReuseStrategy);
 
   readonly currentUser$ = new BehaviorSubject<AuthUser | null>(null);
 
@@ -69,6 +71,8 @@ export class AuthService {
     this.favorites.clear();
     this.player.reset();
     this.tags.invalidate();
+    sessionStorage.clear();
+    this.searchRouteReuse.clearCache();
   }
 
   private persistToken(token: string): void {

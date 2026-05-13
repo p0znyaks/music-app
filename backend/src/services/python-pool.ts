@@ -6,6 +6,7 @@ export type PythonWorkerAction =
   | 'ping'
   | 'search_albums'
   | 'search_artists'
+  | 'search_songs'
   | 'search_tracks'
   | 'get_album'
   | 'get_artist'

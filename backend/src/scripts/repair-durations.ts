@@ -8,7 +8,6 @@ import { Role } from '../entities/role.entity';
 import { ListenHistory } from '../entities/listen-history.entity';
 import { TrackTag } from '../entities/track-tag.entity';
 import { Clip } from '../entities/clip.entity';
-import { UserMixPreferences } from '../entities/user-mix-preferences.entity';
 import { ytdlpService } from '../services/ytdlp.service';
 
 function normalizeDurationSeconds(value: unknown): number | null {
@@ -25,7 +24,7 @@ async function main(): Promise<void> {
   const forceAll = process.argv.includes('--all');
 
   AppDataSource.setOptions({
-    entities: [Role, User, Playlist, PlaylistTrack, FavoriteTrack, ListenHistory, TrackTag, Clip, UserMixPreferences],
+    entities: [Role, User, Playlist, PlaylistTrack, FavoriteTrack, ListenHistory, TrackTag, Clip],
     synchronize: false,
   });
   await AppDataSource.initialize();
