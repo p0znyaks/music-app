@@ -44,7 +44,7 @@ fs.writeFileSync(path.join(baseDir, 'backend', 'server-cert.pem'), certData);
 fs.writeFileSync(path.join(baseDir, 'nginx', 'certs', 'server-key.pem'), keyData);
 fs.writeFileSync(path.join(baseDir, 'nginx', 'certs', 'server-cert.pem'), certData);
 
-fs.rmSync(tmpDir, { recursive: true, force: true });
+try { fs.rmdirSync(tmpDir, { recursive: true }); } catch (_) {}
 
 console.log(`Generated self-signed cert for IP: ${serverIP} + localhost`);
 console.log('Updated:');
