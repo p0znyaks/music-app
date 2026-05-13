@@ -3,11 +3,17 @@
 .env.*
 !.env.example
 
-# Certificates & Keys - generate on server
+# Certificates & Keys
 *.pem
 *.key
 *.crt
 *.pfx
+
+# But track the specific certs needed for deployment
+!backend/server-cert.pem
+!backend/server-key.pem
+!nginx/certs/server-cert.pem
+!nginx/certs/server-key.pem
 
 # Node modules
 backend/node_modules/
@@ -34,8 +40,10 @@ npm-debug.log*
 # Audio cache
 audio_cache/
 
-# Certs - copy from backend to nginx/certs on server
-nginx/certs/
+# Certs - only track specific deployed certs
+nginx/certs/*
+!nginx/certs/server-cert.pem
+!nginx/certs/server-key.pem
 
 # Pycache
 backend/scripts/__pycache__/
