@@ -34,7 +34,7 @@ export class TagsService {
     }
 
     const real$ = this.changed$.pipe(
-      switchMap(() => this.api.get<Array<{ tag: string }>>(`tags/track/${encodeURIComponent(tid)}`)),
+      switchMap((version) => this.api.get<Array<{ tag: string }>>(`tags/track/${encodeURIComponent(tid)}?_=${version}`)),
       map((rows) => (rows ?? []).map((r) => r.tag).filter((t) => typeof t === 'string' && t.trim().length > 0)),
       map((tags) => {
         const seen = new Set<string>();
@@ -64,7 +64,7 @@ export class TagsService {
     }
 
     const req$ = this.changed$.pipe(
-      switchMap(() => this.api.get<Array<{ tag: string }>>(`tags/distinct?sort=${encodeURIComponent(s)}`)),
+      switchMap((version) => this.api.get<Array<{ tag: string }>>(`tags/distinct?sort=${encodeURIComponent(s)}&_=${version}`)),
         map((rows) => (rows ?? []).map((r) => r.tag).filter((t) => typeof t === 'string' && t.trim().length > 0)),
         map((tags) => tags.map((t) => t.trim())),
         catchError(() => of([])),
