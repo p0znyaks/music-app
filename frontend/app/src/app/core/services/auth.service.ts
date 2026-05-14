@@ -67,6 +67,7 @@ export class AuthService {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem('personalMixMixes');
     localStorage.removeItem('personalMixHour');
+    localStorage.removeItem('home_data_cache');
     this.currentUser$.next(null);
     this.favorites.clear();
     this.player.reset();

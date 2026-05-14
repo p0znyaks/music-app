@@ -449,6 +449,8 @@ export class HomeComponent {
   private readonly pageSize = computed(() => this.data()?.carousel.pageSize ?? 6);
   private readonly maxForwardPages = computed(() => this.data()?.carousel.maxForwardPages ?? 2);
   private readonly sectionAnim = signal<Record<string, 'next' | 'prev' | null>>({});
+  private readonly CACHE_KEY = 'home_data_cache';
+  private readonly CACHE_MAX_AGE = 60 * 60 * 1000;
 
   constructor() {
     this.load();
@@ -457,16 +459,50 @@ export class HomeComponent {
   private load(): void {
     this.loading.set(true);
     this.error.set(null);
+
+    const cached = this.loadCachedHomeData();
+    if (cached) {
+      this.data.set(cached);
+      this.loading.set(false);
+    }
+
     this.api.get<HomeRecoResponse>('reco/home').subscribe({
       next: (payload) => {
-        this.data.set(this.normalizeHomePayload(payload));
+        const normalized = this.normalizeHomePayload(payload);
+        this.data.set(normalized);
         this.loading.set(false);
+        this.saveCachedHomeData(normalized);
       },
       error: () => {
-        this.error.set(this.settings.t('failedLoadHome'));
+        if (!this.data()) {
+          this.error.set(this.settings.t('failedLoadHome'));
+        }
         this.loading.set(false);
       },
     });
+  }
+
+  private loadCachedHomeData(): HomeRecoResponse | null {
+    try {
+      const raw = localStorage.getItem(this.CACHE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as { data: HomeRecoResponse; savedAt: number };
+      if (Date.now() - parsed.savedAt > this.CACHE_MAX_AGE) {
+        localStorage.removeItem(this.CACHE_KEY);
+        return null;
+      }
+      return parsed.data;
+    } catch {
+      return null;
+    }
+  }
+
+  private saveCachedHomeData(data: HomeRecoResponse): void {
+    try {
+      localStorage.setItem(this.CACHE_KEY, JSON.stringify({ data, savedAt: Date.now() }));
+    } catch {
+      /* storage unavailable or full — ignore */
+    }
   }
 
   openSearch(): void {
