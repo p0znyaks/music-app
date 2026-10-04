@@ -1,7 +1,7 @@
-import type { MigrationInterface, QueryRunner } from "typeorm";
+import type { MigrationInterface, QueryRunner } from 'typeorm';
 
 export class InitialSchema1700000000000 implements MigrationInterface {
-  name = "InitialSchema1700000000000";
+  name = 'InitialSchema1700000000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
@@ -50,9 +50,7 @@ export class InitialSchema1700000000000 implements MigrationInterface {
       `ALTER TABLE "track_tags" ADD CONSTRAINT "FK_67febdcc6d9fdda82f343b9e72d" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`,
     );
     // Base roles are part of the schema seed, not application startup.
-    await queryRunner.query(
-      `INSERT INTO "roles" ("id", "name") VALUES (1, 'guest'), (2, 'user')`,
-    );
+    await queryRunner.query(`INSERT INTO "roles" ("id", "name") VALUES (1, 'guest'), (2, 'user')`);
     await queryRunner.query(
       `SELECT setval(pg_get_serial_sequence('roles', 'id'), COALESCE((SELECT MAX(id) FROM roles), 1))`,
     );
@@ -74,12 +72,8 @@ export class InitialSchema1700000000000 implements MigrationInterface {
     await queryRunner.query(
       `ALTER TABLE "favorite_tracks" DROP CONSTRAINT "FK_3af7a3ee5333d4db9a85133b87a"`,
     );
-    await queryRunner.query(
-      `ALTER TABLE "clips" DROP CONSTRAINT "FK_64dabc2724586a260ce3c893208"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "users" DROP CONSTRAINT "FK_a2cecd1a3531c0b041e29ba46e1"`,
-    );
+    await queryRunner.query(`ALTER TABLE "clips" DROP CONSTRAINT "FK_64dabc2724586a260ce3c893208"`);
+    await queryRunner.query(`ALTER TABLE "users" DROP CONSTRAINT "FK_a2cecd1a3531c0b041e29ba46e1"`);
     await queryRunner.query(`DROP TABLE "track_tags"`);
     await queryRunner.query(`DROP TABLE "playlist_tracks"`);
     await queryRunner.query(`DROP TABLE "playlists"`);

@@ -1,8 +1,8 @@
-import { Request, Response } from "express";
-import { createLogger } from "../logger";
-import { streamTrack } from "../services/audio-stream.service";
-import { TrackUnavailableError, ytdlpService } from "../services/ytdlp.service";
-import { routeParam } from "../http/params";
+import { Request, Response } from 'express';
+import { createLogger } from '../logger';
+import { streamTrack } from '../services/audio-stream.service';
+import { TrackUnavailableError, ytdlpService } from '../services/ytdlp.service';
+import { routeParam } from '../http/params';
 
 /**
  * Track endpoints.
@@ -15,14 +15,14 @@ import { routeParam } from "../http/params";
 function requireTrackId(req: Request, res: Response): string | null {
   const trackId = routeParam(req.params.trackId);
   if (!trackId.trim()) {
-    res.status(400).json({ message: "trackId is required" });
+    res.status(400).json({ message: 'trackId is required' });
     return null;
   }
   return trackId;
 }
 
 /** GET /api/tracks/:trackId/proxy-stream */
-const log = createLogger("track");
+const log = createLogger('track');
 
 export async function getProxyStream(req: Request, res: Response) {
   const trackId = requireTrackId(req, res);
@@ -40,12 +40,10 @@ export async function getStreamUrl(req: Request, res: Response) {
     return res.json({ url: await ytdlpService.getStreamUrl(trackId) });
   } catch (err) {
     if (err instanceof TrackUnavailableError) {
-      return res
-        .status(404)
-        .json({ message: "Track is unavailable", reason: err.reason });
+      return res.status(404).json({ message: 'Track is unavailable', reason: err.reason });
     }
     log.error(err);
-    return res.status(502).json({ message: "Failed to resolve stream URL" });
+    return res.status(502).json({ message: 'Failed to resolve stream URL' });
   }
 }
 
@@ -58,6 +56,6 @@ export async function getMetadata(req: Request, res: Response) {
     return res.json(await ytdlpService.getMetadata(trackId));
   } catch (err) {
     log.error(err);
-    return res.status(502).json({ message: "Failed to fetch track metadata" });
+    return res.status(502).json({ message: 'Failed to fetch track metadata' });
   }
 }

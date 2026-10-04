@@ -1,5 +1,5 @@
-import { envInt } from "../../env";
-import { seededShuffle } from "../../utils/shuffle";
+import { envInt } from '../../env';
+import { seededShuffle } from '../../utils/shuffle';
 
 /** One carousel page holds six cards. */
 export const PAGE_SIZE = 6;
@@ -24,15 +24,9 @@ export const MIN_RADIO_TRACKS = 8;
  * comfortably longer than that keeps the current hour served from cache while
  * letting yesterday's buckets expire instead of lingering as dead entries.
  */
-export const TTL_RECO_HOME_SEC = envInt("REDIS_TTL_RECO_HOME_SEC", 2 * 60 * 60);
-export const TTL_RECO_MIX_SEC = envInt(
-  "REDIS_TTL_RECO_MIX_SEC",
-  TTL_RECO_HOME_SEC,
-);
-export const TTL_RECO_SIMILAR_SEC = envInt(
-  "REDIS_TTL_RECO_SIMILAR_SEC",
-  TTL_RECO_HOME_SEC,
-);
+export const TTL_RECO_HOME_SEC = envInt('REDIS_TTL_RECO_HOME_SEC', 2 * 60 * 60);
+export const TTL_RECO_MIX_SEC = envInt('REDIS_TTL_RECO_MIX_SEC', TTL_RECO_HOME_SEC);
+export const TTL_RECO_SIMILAR_SEC = envInt('REDIS_TTL_RECO_SIMILAR_SEC', TTL_RECO_HOME_SEC);
 
 /** Cache key for the assembled home payload. Bucketed by UTC hour so the feed
  *  rotates on its own without a background job. */
@@ -40,11 +34,7 @@ export function recoHomeCacheKey(userId: number, hourBucket: string): string {
   return `reco:home:v4:${userId}:h:${hourBucket}`;
 }
 
-export function mixCacheKey(params: {
-  userId: number;
-  hourBucket: string;
-  n: number;
-}): string {
+export function mixCacheKey(params: { userId: number; hourBucket: string; n: number }): string {
   return `reco:mix:v2:${params.userId}:h:${params.hourBucket}:n:${params.n}`;
 }
 
@@ -55,30 +45,27 @@ export function similarCacheKey(seedArtist: string): string {
 /** `YYYYMMDDHH` in UTC — the rotation window for cached feeds. */
 export function hourBucketUtc(ts = new Date()): string {
   const y = ts.getUTCFullYear();
-  const m = String(ts.getUTCMonth() + 1).padStart(2, "0");
-  const d = String(ts.getUTCDate()).padStart(2, "0");
-  const h = String(ts.getUTCHours()).padStart(2, "0");
+  const m = String(ts.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(ts.getUTCDate()).padStart(2, '0');
+  const h = String(ts.getUTCHours()).padStart(2, '0');
   return `${y}${m}${d}${h}`;
 }
 
 /** Per-user fallback genres so a user without history still gets a varied feed. */
-export function getPersonalizedFallbackGenres(
-  userId: number,
-  limit = 8,
-): string[] {
+export function getPersonalizedFallbackGenres(userId: number, limit = 8): string[] {
   const shuffled = seededShuffle(FALLBACK_GENRES, userId);
   return shuffled.slice(0, limit);
 }
 
 const FALLBACK_GENRES = [
-  "pop",
-  "rock",
-  "electronic",
-  "hip hop",
-  "indie",
-  "alternative",
-  "r&b",
-  "lofi",
-  "jazz",
-  "house",
+  'pop',
+  'rock',
+  'electronic',
+  'hip hop',
+  'indie',
+  'alternative',
+  'r&b',
+  'lofi',
+  'jazz',
+  'house',
 ];

@@ -1,8 +1,8 @@
-import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
-import express from "express";
-import http from "http";
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
+import express from 'express';
+import http from 'http';
 
-process.env.PYTHON_WORKERS = "0";
+process.env.PYTHON_WORKERS = '0';
 
 const { mockYtMusicService, mockYtdlpService } = vi.hoisted(() => {
   const ytm = {
@@ -15,20 +15,20 @@ const { mockYtMusicService, mockYtdlpService } = vi.hoisted(() => {
   return { mockYtMusicService: ytm, mockYtdlpService: ytdlp };
 });
 
-vi.mock("../src/services/redis", () => ({
+vi.mock('../src/services/redis', () => ({
   getRedis: vi.fn().mockReturnValue({
     get: vi.fn().mockResolvedValue(null),
-    set: vi.fn().mockResolvedValue("OK"),
+    set: vi.fn().mockResolvedValue('OK'),
   }),
 }));
-vi.mock("../src/services/ytmusic.service", () => ({
+vi.mock('../src/services/ytmusic.service', () => ({
   ytmusicService: mockYtMusicService,
 }));
-vi.mock("../src/services/ytdlp.service", () => ({
+vi.mock('../src/services/ytdlp.service', () => ({
   ytdlpService: mockYtdlpService,
 }));
 
-import { searchRouter } from "../src/routes/search.routes";
+import { searchRouter } from '../src/routes/search.routes';
 
 interface BenchResult {
   label: string;
@@ -49,7 +49,7 @@ async function bench(
   const agent = new http.Agent({
     keepAlive: true,
     maxSockets: concurrency,
-    scheduling: "fifo",
+    scheduling: 'fifo',
   });
   let completed = 0;
   let errors = 0;
@@ -67,7 +67,7 @@ async function bench(
         await new Promise<void>((resolve) => {
           const req = http.get(url, { agent }, (res) => {
             res.resume();
-            res.on("end", () => {
+            res.on('end', () => {
               const lat = Date.now() - reqStart;
               totalLatency += lat;
               if (lat > maxLat) maxLat = lat;
@@ -76,7 +76,7 @@ async function bench(
               resolve();
             });
           });
-          req.on("error", () => {
+          req.on('error', () => {
             errors++;
             completed++;
             resolve();
@@ -107,14 +107,14 @@ async function bench(
   };
 }
 
-describe("Load test: GET /api/search", () => {
+describe('Load test: GET /api/search', () => {
   let server: http.Server;
   let port: number;
 
   beforeAll(async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    vi.spyOn(console, "log").mockImplementation(() => {});
-    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     mockYtdlpService.search.mockResolvedValue({
       tracks: Array.from({ length: 20 }, (_, i) => ({
@@ -122,13 +122,13 @@ describe("Load test: GET /api/search", () => {
         title: `Song ${i}`,
         artist: `Artist ${i}`,
       })),
-      albums: [{ browseId: "a1", title: "Album 1" }],
-      artists: [{ browseId: "ar1", artist: "Artist 1" }],
+      albums: [{ browseId: 'a1', title: 'Album 1' }],
+      artists: [{ browseId: 'ar1', artist: 'Artist 1' }],
     });
 
     const app = express();
     app.use(express.json());
-    app.use("/api", searchRouter);
+    app.use('/api', searchRouter);
 
     await new Promise<void>((resolve) => {
       server = app.listen(0, () => {
@@ -142,7 +142,7 @@ describe("Load test: GET /api/search", () => {
     server?.close();
   });
 
-  it("нагрузочное тестирование: 1000 / 2500 / 5000 / 10000 RPS", async () => {
+  it('нагрузочное тестирование: 1000 / 2500 / 5000 / 10000 RPS', async () => {
     type Scenario = { requests: number; conn: number };
     const scenarios: Scenario[] = [
       { requests: 5000, conn: 10 },
@@ -155,23 +155,14 @@ describe("Load test: GET /api/search", () => {
 
     for (const sc of scenarios) {
       process.stdout.write(`  → ${sc.requests} req (${sc.conn} conn)... `);
-      const r = await bench(
-        `http://localhost:${port}/api/search?q=test`,
-        sc.requests,
-        sc.conn,
-      );
+      const r = await bench(`http://localhost:${port}/api/search?q=test`, sc.requests, sc.conn);
       rows.push(r);
-      process.stdout.write(
-        `${r.elapsedMs}ms (${Math.round(r.actualRps)} req/s)\n`,
-      );
+      process.stdout.write(`${r.elapsedMs}ms (${Math.round(r.actualRps)} req/s)\n`);
     }
 
-    const sep =
-      "═══════════════════════════════════════════════════════════════════════════";
+    const sep = '═══════════════════════════════════════════════════════════════════════════';
     process.stdout.write(`\n${sep}\n`);
-    process.stdout.write(
-      `  НАГРУЗОЧНОЕ ТЕСТИРОВАНИЕ SEARCH (GET /api/search?q=test)\n`,
-    );
+    process.stdout.write(`  НАГРУЗОЧНОЕ ТЕСТИРОВАНИЕ SEARCH (GET /api/search?q=test)\n`);
     process.stdout.write(`  Все тесты: PASSED, ошибок: 0\n`);
     process.stdout.write(`${sep}\n`);
     process.stdout.write(

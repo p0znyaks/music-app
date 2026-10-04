@@ -9,9 +9,9 @@
 
 /** First value of a route parameter, percent-decoded. */
 export function routeParam(raw: string | string[] | undefined): string {
-  if (raw === undefined) return "";
+  if (raw === undefined) return '';
   const value = Array.isArray(raw) ? raw[0] : raw;
-  if (typeof value !== "string") return "";
+  if (typeof value !== 'string') return '';
 
   try {
     return decodeURIComponent(value);
@@ -32,5 +32,5 @@ export function routeId(raw: string | string[] | undefined): number | null {
 /** Reads the `?force=1` confirmation flag used by destructive endpoints. */
 export function wantsForce(query: unknown): boolean {
   const value = (query as { force?: unknown } | undefined)?.force;
-  return value === "1" || value === "true";
+  return value === '1' || value === 'true';
 }

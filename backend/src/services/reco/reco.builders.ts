@@ -1,10 +1,10 @@
-import { AppDataSource } from "../dataSource";
-import { FavoriteTrack } from "../../entities/favorite-track.entity";
-import { ListenHistory } from "../../entities/listen-history.entity";
-import { PlaylistTrack } from "../../entities/playlist-track.entity";
-import { TrackTag } from "../../entities/track-tag.entity";
-import { getRedis } from "../redis";
-import { ytmusicService } from "../ytmusic.service";
+import { AppDataSource } from '../dataSource';
+import { FavoriteTrack } from '../../entities/favorite-track.entity';
+import { ListenHistory } from '../../entities/listen-history.entity';
+import { PlaylistTrack } from '../../entities/playlist-track.entity';
+import { TrackTag } from '../../entities/track-tag.entity';
+import { getRedis } from '../redis';
+import { ytmusicService } from '../ytmusic.service';
 import {
   MAX_FORWARD_PAGES,
   MAX_GENRE_BLOCKS,
@@ -20,17 +20,13 @@ import {
   hourBucketUtc,
   mixCacheKey,
   similarCacheKey,
-} from "./reco.config";
-import {
-  filterGenrePool,
-  getUserGenres,
-  tracksMatchingGenre,
-} from "./reco.genres";
+} from './reco.config';
+import { filterGenrePool, getUserGenres, tracksMatchingGenre } from './reco.genres';
 import {
   fillMissingTrackMedia,
   isYoutubeVideoId,
   youtubeThumbnailFallbackUrl,
-} from "../track-media.service";
+} from '../track-media.service';
 import {
   asRecoTrack,
   capArtists,
@@ -38,7 +34,7 @@ import {
   pickTopArtists,
   takeUniqueTracks,
   takeUniqueTracksShuffled,
-} from "./reco.tracks";
+} from './reco.tracks';
 import type {
   GenreBlock,
   HomeRecoResponse,
@@ -48,7 +44,7 @@ import type {
   RecoArtist,
   RecoTrack,
   SimilarBlock,
-} from "./reco.types";
+} from './reco.types';
 
 /** Rows read per user table when assembling the seed pool. */
 const SEED_POOL_SIZE = 120;
@@ -63,7 +59,7 @@ const RADIO_FETCH_SIZE = 60;
 /** How many artists a mix subtitle lists. */
 const MIX_SUBTITLE_ARTISTS = 4;
 /** Broad queries used to fill the feed for a user with no history. */
-const POPULAR_FALLBACK_QUERIES = ["top songs 2026", "popular songs"];
+const POPULAR_FALLBACK_QUERIES = ['top songs 2026', 'popular songs'];
 
 type SeedSource = {
   history: ListenHistory[];
@@ -80,24 +76,24 @@ async function loadUserSeeds(userId: number): Promise<SeedSource> {
   const [history, favorites, playlist, tags] = await Promise.all([
     AppDataSource.getRepository(ListenHistory).find({
       where: { user: { id: userId } },
-      order: { listenedAt: "DESC" },
+      order: { listenedAt: 'DESC' },
       take: SEED_POOL_SIZE,
     }),
     AppDataSource.getRepository(FavoriteTrack).find({
       where: { user: { id: userId } },
-      order: { addedAt: "DESC" },
+      order: { addedAt: 'DESC' },
       take: SEED_POOL_SIZE,
     }),
     AppDataSource.getRepository(PlaylistTrack)
-      .createQueryBuilder("pt")
-      .innerJoin("pt.playlist", "p")
-      .where("p.user_id = :uid", { uid: userId })
-      .orderBy("pt.addedAt", "DESC")
+      .createQueryBuilder('pt')
+      .innerJoin('pt.playlist', 'p')
+      .where('p.user_id = :uid', { uid: userId })
+      .orderBy('pt.addedAt', 'DESC')
       .take(SEED_POOL_SIZE)
       .getMany(),
     AppDataSource.getRepository(TrackTag).find({
       where: { user: { id: userId } },
-      order: { addedAt: "DESC" },
+      order: { addedAt: 'DESC' },
       take: SEED_POOL_SIZE,
     }),
   ]);
@@ -115,11 +111,7 @@ function toRecoTracks(source: SeedSource): RecoTrack[] {
 }
 
 /** Builds a mix card from its tracks: subtitle, cover and preview strip. */
-function buildMixCard(
-  id: string,
-  title: string,
-  tracks: readonly MixTrackRow[],
-): MixCard {
+function buildMixCard(id: string, title: string, tracks: readonly MixTrackRow[]): MixCard {
   const thumbs = tracks
     .map((row) => row.thumbnailUrl)
     .filter((url): url is string => !!url)
@@ -129,7 +121,7 @@ function buildMixCard(
   return {
     id,
     title,
-    subtitle: artists.join(", "),
+    subtitle: artists.join(', '),
     thumbnailUrl: thumbs[0] ?? null,
     artists,
     previewThumbs: thumbs,
@@ -146,22 +138,17 @@ function buildMixCardsFromGenreBlocks(
   genreBlocks: readonly GenreBlock[],
 ): MixCard[] {
   const cards: MixCard[] = [];
-  const groups = [
-    topArtists.slice(0, 3),
-    topArtists.slice(1, 4),
-    topArtists.slice(2, 5),
-  ];
+  const groups = [topArtists.slice(0, 3), topArtists.slice(1, 4), topArtists.slice(2, 5)];
 
   for (const [index, group] of groups.entries()) {
     const artists = group.filter((name) => name.trim().length > 0);
     if (artists.length < MIN_MIX_TRACKS) continue;
 
-    const source =
-      genreBlocks[index % Math.max(genreBlocks.length, 1)]?.tracks ?? [];
+    const source = genreBlocks[index % Math.max(genreBlocks.length, 1)]?.tracks ?? [];
     cards.push({
       id: `mix-${index + 1}`,
       title: `Mix for you #${index + 1}`,
-      subtitle: artists.join(", "),
+      subtitle: artists.join(', '),
       thumbnailUrl: source[0]?.thumbnailUrl ?? null,
       artists,
     });
@@ -178,21 +165,15 @@ function buildMixCardsFromGenreBlocks(
  * seed "wins" a given artist depends on network timing. That only affects which
  * card an artist lands on, never whether it appears at all.
  */
-async function buildSimilarArtistBlocks(
-  artists: string[],
-): Promise<SimilarBlock[]> {
-  const seeds = artists
-    .slice(0, MAX_GENRE_BLOCKS)
-    .filter((artist) => artist.trim().length > 0);
+async function buildSimilarArtistBlocks(artists: string[]): Promise<SimilarBlock[]> {
+  const seeds = artists.slice(0, MAX_GENRE_BLOCKS).filter((artist) => artist.trim().length > 0);
   if (seeds.length === 0) return [];
 
   const redis = getRedis();
   const seenBrowseIds = new Set<string>();
 
   const claim = (items: readonly RecoArtist[]): RecoArtist[] => {
-    const fresh = items.filter(
-      (item) => item.browseId && !seenBrowseIds.has(item.browseId),
-    );
+    const fresh = items.filter((item) => item.browseId && !seenBrowseIds.has(item.browseId));
     for (const item of fresh) seenBrowseIds.add(item.browseId);
     return fresh;
   };
@@ -235,7 +216,7 @@ async function buildSimilarArtistBlocks(
 
         const block = { seedArtist: seed, items };
         redis
-          .set(cacheKey, JSON.stringify(block), "EX", TTL_RECO_SIMILAR_SEC)
+          .set(cacheKey, JSON.stringify(block), 'EX', TTL_RECO_SIMILAR_SEC)
           .catch(() => undefined);
         return block;
       } catch {
@@ -269,7 +250,7 @@ async function buildAlbumsBlock(params: {
   }): void => {
     if (!row.browseId || !row.title || albums.length >= PAGE_TOTAL) return;
     if (albums.some((album) => album.browseId === row.browseId)) return;
-    const artist = (row.artist ?? "").trim().toLowerCase();
+    const artist = (row.artist ?? '').trim().toLowerCase();
     if (!artist || seenArtists.has(artist)) return;
     seenArtists.add(artist);
     albums.push({
@@ -290,15 +271,12 @@ async function buildAlbumsBlock(params: {
     }
   };
 
-  collectFromBatch(
-    await ytmusicService.searchAlbumsBatch(topArtists.slice(0, 8)),
-  );
+  collectFromBatch(await ytmusicService.searchAlbumsBatch(topArtists.slice(0, 8)));
   if (albums.length > 0) return albums;
 
   try {
     const genres = getPersonalizedFallbackGenres(userId);
-    const genre =
-      genres[(userId * 7 + new Date().getUTCHours()) % genres.length] ?? "pop";
+    const genre = genres[(userId * 7 + new Date().getUTCHours()) % genres.length] ?? 'pop';
     collectFromBatch(await ytmusicService.searchAlbumsBatch([genre]));
   } catch {
     // Leave the block empty rather than failing the whole page.
@@ -320,30 +298,20 @@ async function buildGenreTrackBlocks(params: {
   usedTrackIds?: ReadonlySet<string>;
   usedArtistNames?: ReadonlySet<string>;
 }): Promise<GenreBlock[]> {
-  const {
-    genres,
-    varietySeed,
-    recommendedTracks,
-    usedTrackIds,
-    usedArtistNames,
-  } = params;
+  const { genres, varietySeed, recommendedTracks, usedTrackIds, usedArtistNames } = params;
 
   const blockUsedTrackIds = new Set(usedTrackIds);
   const blockUsedArtists = new Set(usedArtistNames);
   const blocks: GenreBlock[] = [];
 
   for (const [index, genre] of genres.slice(0, MAX_GENRE_BLOCKS).entries()) {
-    const recos = recommendedTracks
-      ? tracksMatchingGenre(recommendedTracks, genre)
-      : [];
+    const recos = recommendedTracks ? tracksMatchingGenre(recommendedTracks, genre) : [];
 
     try {
       const songs = await ytmusicService.searchSongs(`${genre} music`);
       const pool = filterGenrePool((songs ?? []).map(asRecoTrack), genre)
         .filter((track) => !isLikelyCompilation(track))
-        .filter(
-          (track) => !recos.some((reco) => reco.trackId === track.trackId),
-        );
+        .filter((track) => !recos.some((reco) => reco.trackId === track.trackId));
 
       const block = takeUniqueTracksShuffled(
         [...recos, ...pool].filter(
@@ -401,10 +369,7 @@ async function buildRadioRecommendations(params: {
           })),
     ),
     Number.MAX_SAFE_INTEGER,
-  ).filter(
-    (track) =>
-      !params.excludeTrackIds.has(track.trackId) && !isLikelyCompilation(track),
-  );
+  ).filter((track) => !params.excludeTrackIds.has(track.trackId) && !isLikelyCompilation(track));
 
   return capArtists(candidates, 2, params.totalLimit);
 }
@@ -413,16 +378,12 @@ async function buildRadioRecommendations(params: {
  * Cold-start filler: broad "popular" queries used when the radio feed comes
  * back nearly empty, e.g. for a brand-new account.
  */
-async function getPopularFallbackTracks(
-  varietySeed: number,
-): Promise<RecoTrack[]> {
+async function getPopularFallbackTracks(varietySeed: number): Promise<RecoTrack[]> {
   const results = await Promise.all(
     POPULAR_FALLBACK_QUERIES.map(async (query) => {
       try {
         const songs = await ytmusicService.searchSongs(query);
-        return (songs ?? [])
-          .map(asRecoTrack)
-          .filter((track) => !isLikelyCompilation(track));
+        return (songs ?? []).map(asRecoTrack).filter((track) => !isLikelyCompilation(track));
       } catch {
         return [] as RecoTrack[];
       }
@@ -475,9 +436,7 @@ export async function buildRegeneratedMixes(params: {
   const cards: MixCard[] = [];
 
   for (const [index, songs] of perGenre.entries()) {
-    const genreTracks = songs
-      .map(asRecoTrack)
-      .filter((track) => !isLikelyCompilation(track));
+    const genreTracks = songs.map(asRecoTrack).filter((track) => !isLikelyCompilation(track));
     let mixTracks = takeUniqueTracksShuffled(
       genreTracks.filter((track) => !seen.has(track.trackId)),
       PAGE_TOTAL,
@@ -508,20 +467,13 @@ export async function buildRegeneratedMixes(params: {
       artist: track.artist,
       thumbnailUrl:
         track.thumbnailUrl ||
-        (isYoutubeVideoId(track.trackId)
-          ? youtubeThumbnailFallbackUrl(track.trackId)
-          : null),
+        (isYoutubeVideoId(track.trackId) ? youtubeThumbnailFallbackUrl(track.trackId) : null),
       duration: track.duration ?? null,
     }));
 
     // Fire-and-forget: a cache write failure must not fail the request.
     getRedis()
-      .set(
-        mixCacheKey({ userId, hourBucket, n }),
-        JSON.stringify(rows),
-        "EX",
-        TTL_RECO_MIX_SEC,
-      )
+      .set(mixCacheKey({ userId, hourBucket, n }), JSON.stringify(rows), 'EX', TTL_RECO_MIX_SEC)
       .catch(() => undefined);
 
     cards.push(buildMixCard(`${hourBucket}-${n}`, `Mix #${n}`, rows));
@@ -534,16 +486,14 @@ export async function buildRegeneratedMixes(params: {
  * Assembles the whole home payload: recommended tracks, albums, mixes,
  * similar artists and per-genre rows.
  */
-export async function buildHomeRecoPayload(
-  userId: number,
-): Promise<HomeRecoResponse> {
+export async function buildHomeRecoPayload(userId: number): Promise<HomeRecoResponse> {
   const hourBucket = hourBucketUtc();
   const seeds = await loadUserSeeds(userId);
   const pool = toRecoTracks(seeds);
 
   const recentTrackIds = new Set<string>();
   for (const row of seeds.history.slice(0, HISTORY_SAMPLE_SIZE)) {
-    const id = (row.trackId ?? "").trim();
+    const id = (row.trackId ?? '').trim();
     if (id) recentTrackIds.add(id);
   }
 
@@ -561,30 +511,22 @@ export async function buildHomeRecoPayload(
         })
       : Promise.resolve<RecoTrack[]>([]);
 
-  const [radioResult, similarTo, albumsForYou, popularTracks] =
-    await Promise.all([
-      radioPromise,
-      buildSimilarArtistBlocks(topArtists).catch(() => [] as SimilarBlock[]),
-      buildAlbumsBlock({ topArtists, userId }).catch(() => [] as RecoAlbum[]),
-      getPopularFallbackTracks(varietySeed).catch(() => [] as RecoTrack[]),
-    ]);
+  const [radioResult, similarTo, albumsForYou, popularTracks] = await Promise.all([
+    radioPromise,
+    buildSimilarArtistBlocks(topArtists).catch(() => [] as SimilarBlock[]),
+    buildAlbumsBlock({ topArtists, userId }).catch(() => [] as RecoAlbum[]),
+    getPopularFallbackTracks(varietySeed).catch(() => [] as RecoTrack[]),
+  ]);
 
   let recommendedTracks = radioResult;
   if (recommendedTracks.length < MIN_RADIO_TRACKS) {
     recommendedTracks = takeUniqueTracks(
-      [
-        ...recommendedTracks,
-        ...takeUniqueTracks(pool, PAGE_TOTAL),
-        ...popularTracks,
-      ],
+      [...recommendedTracks, ...takeUniqueTracks(pool, PAGE_TOTAL), ...popularTracks],
       PAGE_TOTAL,
     );
   }
 
-  recommendedTracks = await fillMissingTrackMedia(
-    recommendedTracks,
-    PAGE_TOTAL,
-  );
+  recommendedTracks = await fillMissingTrackMedia(recommendedTracks, PAGE_TOTAL);
 
   const finalGenres = getUserGenres({
     userId,
@@ -619,10 +561,7 @@ export async function buildHomeRecoPayload(
     carousel: { pageSize: PAGE_SIZE, maxForwardPages: MAX_FORWARD_PAGES },
     recommendedTracks,
     albumsForYou,
-    mixesForYou:
-      mixes.length > 0
-        ? mixes
-        : buildMixCardsFromGenreBlocks(topArtists, byGenre),
+    mixesForYou: mixes.length > 0 ? mixes : buildMixCardsFromGenreBlocks(topArtists, byGenre),
     similarTo,
     byGenre,
   };
@@ -646,10 +585,5 @@ export async function writeMixTracks(params: {
   n: number;
   rows: MixTrackRow[];
 }): Promise<void> {
-  await getRedis().set(
-    mixCacheKey(params),
-    JSON.stringify(params.rows),
-    "EX",
-    TTL_RECO_MIX_SEC,
-  );
+  await getRedis().set(mixCacheKey(params), JSON.stringify(params.rows), 'EX', TTL_RECO_MIX_SEC);
 }

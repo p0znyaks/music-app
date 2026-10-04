@@ -1,22 +1,19 @@
-import { AsyncSemaphore, envInt } from "../env";
-import { createLogger } from "../logger";
-import { spawn } from "child_process";
-import { redisGetSWR, stringifyEnvelope } from "./cache-swr";
-import { getPythonPool } from "./python-pool";
-import { getRedis } from "./redis";
-import { normalizeDuration } from "./track-media.service";
-import {
-  innertubeSearchBreaker,
-  innertubeStreamBreaker,
-} from "./upstream-breaker";
+import { AsyncSemaphore, envInt } from '../env';
+import { createLogger } from '../logger';
+import { spawn } from 'child_process';
+import { redisGetSWR, stringifyEnvelope } from './cache-swr';
+import { getPythonPool } from './python-pool';
+import { getRedis } from './redis';
+import { normalizeDuration } from './track-media.service';
+import { innertubeSearchBreaker, innertubeStreamBreaker } from './upstream-breaker';
 
-const log = createLogger("ytdlp");
+const log = createLogger('ytdlp');
 
-const CACHE_TTL_SEC = envInt("REDIS_TTL_YTDLP_SEC", 86400);
-const META_TTL_SEC = envInt("REDIS_TTL_YTDLP_META_SEC", CACHE_TTL_SEC);
+const CACHE_TTL_SEC = envInt('REDIS_TTL_YTDLP_SEC', 86400);
+const META_TTL_SEC = envInt('REDIS_TTL_YTDLP_META_SEC', CACHE_TTL_SEC);
 // googlevideo URLs carry their own `expire` param and live ~6h, so a longer
 // TTL only serves stale links that make the player hit 403 and re-resolve.
-const STREAM_TTL_SEC = envInt("REDIS_TTL_STREAM_SEC", 18000);
+const STREAM_TTL_SEC = envInt('REDIS_TTL_STREAM_SEC', 18000);
 const STREAM_RETRY_DELAY_MS = 2000;
 // Kept in sync with MAX_TRACKS_OUT in scripts/ytmusic_worker.py, which caps
 // the number of tracks the search endpoints return.
@@ -89,7 +86,7 @@ export class TrackUnavailableError extends Error {
     readonly reason: string,
   ) {
     super(`Track ${trackId} is unavailable: ${reason}`);
-    this.name = "TrackUnavailableError";
+    this.name = 'TrackUnavailableError';
   }
 }
 
@@ -102,7 +99,7 @@ function isPermanentPlayabilityFailure(error: string): boolean {
 }
 
 function ytdlpBinary(): string {
-  return process.env.YTDLP_PATH?.trim() || "yt-dlp";
+  return process.env.YTDLP_PATH?.trim() || 'yt-dlp';
 }
 
 function ytdlpCookieFlags(): string[] {
@@ -110,15 +107,15 @@ function ytdlpCookieFlags(): string[] {
   if (!browser) {
     const cookiesFile = process.env.YTDLP_COOKIES_FILE?.trim();
     if (cookiesFile) {
-      return ["--cookies", cookiesFile];
+      return ['--cookies', cookiesFile];
     }
     return [];
   }
   const configPath = process.env.YTDLP_BROWSER_CONFIG_PATH?.trim();
   if (configPath) {
-    return ["--cookies-from-browser", browser, configPath];
+    return ['--cookies-from-browser', browser, configPath];
   }
-  return ["--cookies-from-browser", browser];
+  return ['--cookies-from-browser', browser];
 }
 
 /**
@@ -129,7 +126,7 @@ function ytdlpCookieFlags(): string[] {
  * back. yt-dlp already retries internally for a while, which is why this is
  * generous compared to the InnerTube budget.
  */
-const YTDLP_TIMEOUT_MS = envInt("YTDLP_TIMEOUT_MS", 20000);
+const YTDLP_TIMEOUT_MS = envInt('YTDLP_TIMEOUT_MS', 20000);
 
 /**
  * Caps how many yt-dlp processes may run at once.
@@ -138,7 +135,7 @@ const YTDLP_TIMEOUT_MS = envInt("YTDLP_TIMEOUT_MS", 20000);
  * a cap, N concurrent searches would spawn N Chromium-sized processes and
  * starve the rest of the container. Beyond the cap callers queue instead.
  */
-const ytdlpLimiter = new AsyncSemaphore(envInt("YTDLP_CONCURRENCY", 3));
+const ytdlpLimiter = new AsyncSemaphore(envInt('YTDLP_CONCURRENCY', 3));
 
 function runYtdlp(args: string[]): Promise<string> {
   return ytdlpLimiter.use(() => spawnYtdlp(args));
@@ -148,9 +145,9 @@ function spawnYtdlp(args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
     const bin = ytdlpBinary();
     const allArgs = [...ytdlpCookieFlags(), ...args];
-    const proc = spawn(bin, allArgs, { stdio: ["ignore", "pipe", "pipe"] });
-    let stdout = "";
-    let stderr = "";
+    const proc = spawn(bin, allArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
     let settled = false;
 
     const timer = setTimeout(() => {
@@ -158,19 +155,19 @@ function spawnYtdlp(args: string[]): Promise<string> {
         return;
       }
       settled = true;
-      proc.kill("SIGKILL");
+      proc.kill('SIGKILL');
       reject(new Error(`yt-dlp timed out after ${YTDLP_TIMEOUT_MS}ms`));
     }, YTDLP_TIMEOUT_MS);
 
-    proc.stdout.setEncoding("utf8");
-    proc.stderr.setEncoding("utf8");
-    proc.stdout.on("data", (chunk: string) => {
+    proc.stdout.setEncoding('utf8');
+    proc.stderr.setEncoding('utf8');
+    proc.stdout.on('data', (chunk: string) => {
       stdout += chunk;
     });
-    proc.stderr.on("data", (chunk: string) => {
+    proc.stderr.on('data', (chunk: string) => {
       stderr += chunk;
     });
-    proc.on("error", (err) => {
+    proc.on('error', (err) => {
       if (settled) {
         return;
       }
@@ -178,7 +175,7 @@ function spawnYtdlp(args: string[]): Promise<string> {
       clearTimeout(timer);
       reject(err);
     });
-    proc.on("close", (code) => {
+    proc.on('close', (code) => {
       if (settled) {
         return;
       }
@@ -196,9 +193,7 @@ function spawnYtdlp(args: string[]): Promise<string> {
 function requirePythonPool() {
   const pool = getPythonPool();
   if (!pool) {
-    throw new Error(
-      "Python worker pool is not available (set PYTHON_WORKERS>=1)",
-    );
+    throw new Error('Python worker pool is not available (set PYTHON_WORKERS>=1)');
   }
   return pool;
 }
@@ -206,47 +201,47 @@ function requirePythonPool() {
 async function runYtdlpFlat(url: string, playlistEnd: number): Promise<string> {
   return runYtdlp([
     url,
-    "--dump-json",
-    "--flat-playlist",
-    "--playlist-end",
+    '--dump-json',
+    '--flat-playlist',
+    '--playlist-end',
     String(playlistEnd),
-    "--no-download",
+    '--no-download',
   ]);
 }
 
 function pickThumbnail(entry: Record<string, unknown>): string {
-  if (typeof entry.thumbnail === "string" && entry.thumbnail) {
+  if (typeof entry.thumbnail === 'string' && entry.thumbnail) {
     return entry.thumbnail;
   }
   const thumbs = entry.thumbnails;
   if (Array.isArray(thumbs) && thumbs.length > 0) {
     const first = thumbs[0] as Record<string, unknown>;
-    if (typeof first.url === "string") {
+    if (typeof first.url === 'string') {
       return first.url;
     }
   }
-  return "";
+  return '';
 }
 
 function pickArtist(entry: Record<string, unknown>): string {
   const a = entry.artist;
-  if (typeof a === "string" && a) {
+  if (typeof a === 'string' && a) {
     return a;
   }
   const u = entry.uploader;
-  if (typeof u === "string" && u) {
+  if (typeof u === 'string' && u) {
     return u;
   }
   const c = entry.channel;
-  if (typeof c === "string" && c) {
+  if (typeof c === 'string' && c) {
     return c;
   }
-  return "";
+  return '';
 }
 
 function parseJsonLines(stdout: string): Record<string, unknown>[] {
   const out: Record<string, unknown>[] = [];
-  for (const line of stdout.split("\n")) {
+  for (const line of stdout.split('\n')) {
     const trimmed = line.trim();
     if (!trimmed) {
       continue;
@@ -266,8 +261,8 @@ function isYoutubeVideoId(id: string): boolean {
 
 function mapFullEntry(entry: Record<string, unknown>): TrackMetadata {
   const id = entry.id;
-  const trackId = typeof id === "string" ? id : "";
-  const title = typeof entry.title === "string" ? entry.title : "";
+  const trackId = typeof id === 'string' ? id : '';
+  const title = typeof entry.title === 'string' ? entry.title : '';
   return {
     trackId,
     title,
@@ -285,7 +280,7 @@ function mapFullEntry(entry: Record<string, unknown>): TrackMetadata {
  * upstream request on top of a separate cache entry.
  */
 function normalizeQueryForCache(query: string): string {
-  return query.trim().replace(/\s+/g, " ").toLowerCase();
+  return query.trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
 export class YtdlpService {
@@ -324,7 +319,7 @@ export class YtdlpService {
     if (!innertubeSearchBreaker.isOpen()) {
       try {
         const pool = requirePythonPool();
-        const bundle = await pool.call<SearchBundle>("search_bundle", {
+        const bundle = await pool.call<SearchBundle>('search_bundle', {
           query: q,
         });
         if (bundle?.tracks?.length) {
@@ -337,10 +332,7 @@ export class YtdlpService {
         innertubeSearchBreaker.onFailure(`no tracks for "${q}"`);
       } catch (err) {
         innertubeSearchBreaker.onFailure(String(err));
-        log.warn(
-          `InnerTube bundle failed for "${q}", falling back to yt-dlp:`,
-          err,
-        );
+        log.warn(`InnerTube bundle failed for "${q}", falling back to yt-dlp:`, err);
       }
     }
 
@@ -349,13 +341,13 @@ export class YtdlpService {
     const seen = new Set<string>();
     for (const entry of parseJsonLines(stdoutMain)) {
       const id = entry.id;
-      if (typeof id !== "string" || !isYoutubeVideoId(id) || seen.has(id)) {
+      if (typeof id !== 'string' || !isYoutubeVideoId(id) || seen.has(id)) {
         continue;
       }
       seen.add(id);
       tracks.push({
         trackId: id,
-        title: typeof entry.title === "string" ? entry.title : "",
+        title: typeof entry.title === 'string' ? entry.title : '',
         artist: pickArtist(entry),
         thumbnailUrl: pickThumbnail(entry),
         duration: normalizeDuration(entry.duration) ?? 0,
@@ -367,13 +359,10 @@ export class YtdlpService {
     return { tracks, albums: [], artists: [] };
   }
 
-  async getStreamUrl(
-    trackId: string,
-    opts?: { forceRefresh?: boolean },
-  ): Promise<string> {
+  async getStreamUrl(trackId: string, opts?: { forceRefresh?: boolean }): Promise<string> {
     const id = trackId.trim();
     if (!id) {
-      throw new Error("trackId is required");
+      throw new Error('trackId is required');
     }
 
     const cacheKey = `stream:${id}`;
@@ -420,7 +409,7 @@ export class YtdlpService {
     }
 
     const result = await this.fetchStreamUrlWithInnerTube(id);
-    await redis.set(cacheKey, stringifyEnvelope(result), "EX", STREAM_TTL_SEC);
+    await redis.set(cacheKey, stringifyEnvelope(result), 'EX', STREAM_TTL_SEC);
     return result;
   }
 
@@ -431,24 +420,20 @@ export class YtdlpService {
    */
   private async fetchStreamUrlWithInnerTube(id: string): Promise<string> {
     if (innertubeStreamBreaker.isOpen()) {
-      throw new Error("InnerTube bypassed by breaker");
+      throw new Error('InnerTube bypassed by breaker');
     }
     const pool = getPythonPool();
     if (!pool) {
-      throw new Error("python pool unavailable");
+      throw new Error('python pool unavailable');
     }
-    const result = await pool.call<PlayerStreamResult>("get_player_stream", {
+    const result = await pool.call<PlayerStreamResult>('get_player_stream', {
       videoId: id,
     });
-    if (
-      result?.ok &&
-      typeof result.url === "string" &&
-      result.url.startsWith("http")
-    ) {
+    if (result?.ok && typeof result.url === 'string' && result.url.startsWith('http')) {
       innertubeStreamBreaker.onSuccess();
       return result.url;
     }
-    const reason = result?.error ?? "no url";
+    const reason = result?.error ?? 'no url';
     innertubeStreamBreaker.onFailure(reason);
     log.warn(`InnerTube unavailable for ${id}: ${reason}`);
     // A hard playabilityStatus verdict will not change on retry, and yt-dlp
@@ -460,10 +445,7 @@ export class YtdlpService {
     throw new Error(`InnerTube: ${reason}`);
   }
 
-  private async fetchStreamUrlWithYtdlp(
-    id: string,
-    cacheKey: string,
-  ): Promise<string> {
+  private async fetchStreamUrlWithYtdlp(id: string, cacheKey: string): Promise<string> {
     const redis = getRedis();
     const maxAttempts = 3;
     let lastError: Error | null = null;
@@ -473,24 +455,22 @@ export class YtdlpService {
         const stdout = await runYtdlp([
           // m4a keeps the cached file and the disk fast-path consistent: the
           // nginx and controller paths both serve it as audio/mp4.
-          "-f",
-          "bestaudio[ext=m4a]/bestaudio",
-          "--get-url",
+          '-f',
+          'bestaudio[ext=m4a]/bestaudio',
+          '--get-url',
           `https://www.youtube.com/watch?v=${id}`,
         ]);
-        const url = stdout.trim().split("\n")[0]?.trim() ?? "";
+        const url = stdout.trim().split('\n')[0]?.trim() ?? '';
         if (!url) {
-          throw new Error("Empty stream URL from yt-dlp");
+          throw new Error('Empty stream URL from yt-dlp');
         }
-        await redis.set(cacheKey, stringifyEnvelope(url), "EX", STREAM_TTL_SEC);
+        await redis.set(cacheKey, stringifyEnvelope(url), 'EX', STREAM_TTL_SEC);
         return url;
       } catch (err) {
         lastError = err as Error;
         const message = lastError.message.toLowerCase();
-        const is429 =
-          message.includes("429") || message.includes("too many requests");
-        const isBotBlock =
-          message.includes("sign in to confirm") || message.includes("bot");
+        const is429 = message.includes('429') || message.includes('too many requests');
+        const isBotBlock = message.includes('sign in to confirm') || message.includes('bot');
 
         if ((is429 || isBotBlock) && attempt < maxAttempts - 1) {
           const delay = STREAM_RETRY_DELAY_MS * Math.pow(2, attempt);
@@ -502,7 +482,7 @@ export class YtdlpService {
       }
     }
 
-    throw lastError ?? new Error("Failed to get stream URL after retries");
+    throw lastError ?? new Error('Failed to get stream URL after retries');
   }
 
   /**
@@ -513,17 +493,14 @@ export class YtdlpService {
   async getMetadata(trackId: string): Promise<TrackMetadata> {
     const id = trackId.trim();
     if (!id) {
-      throw new Error("trackId is required");
+      throw new Error('trackId is required');
     }
     return redisGetSWR<TrackMetadata>(
       `track:meta:v1:${id}`,
       META_TTL_SEC,
       undefined,
       async () => {
-        const stdout = await runYtdlp([
-          "--dump-json",
-          `https://www.youtube.com/watch?v=${id}`,
-        ]);
+        const stdout = await runYtdlp(['--dump-json', `https://www.youtube.com/watch?v=${id}`]);
         const entry = JSON.parse(stdout.trim()) as Record<string, unknown>;
         return mapFullEntry(entry);
       },

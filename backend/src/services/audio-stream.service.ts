@@ -1,15 +1,15 @@
-import { get as httpGet } from "http";
-import { get as httpsGet } from "https";
-import fs from "fs";
-import fsp from "fs/promises";
-import { IncomingMessage } from "http";
-import { Transform } from "stream";
-import type { Request, Response } from "express";
-import { createLogger } from "../logger";
-import { AudioCacheWriter, getCachedAudio } from "./audio-cache.service";
-import { TrackUnavailableError, ytdlpService } from "./ytdlp.service";
+import { get as httpGet } from 'http';
+import { get as httpsGet } from 'https';
+import fs from 'fs';
+import fsp from 'fs/promises';
+import { IncomingMessage } from 'http';
+import { Transform } from 'stream';
+import type { Request, Response } from 'express';
+import { createLogger } from '../logger';
+import { AudioCacheWriter, getCachedAudio } from './audio-cache.service';
+import { TrackUnavailableError, ytdlpService } from './ytdlp.service';
 
-const log = createLogger("audio-stream");
+const log = createLogger('audio-stream');
 
 /**
  * Serving audio to the player.
@@ -22,15 +22,11 @@ const log = createLogger("audio-stream");
  */
 
 const YOUTUBE_HEADERS = {
-  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-  Referer: "https://www.youtube.com/",
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+  Referer: 'https://www.youtube.com/',
 };
 
-const PASSTHROUGH_HEADERS = [
-  "content-type",
-  "content-length",
-  "accept-ranges",
-] as const;
+const PASSTHROUGH_HEADERS = ['content-type', 'content-length', 'accept-ranges'] as const;
 const UPSTREAM_TIMEOUT_MS = 15000;
 const MAX_PROXY_ATTEMPTS = 3;
 const MAX_REDIRECTS = 3;
@@ -39,22 +35,19 @@ type UpstreamFailure = Error & { code?: string };
 
 function errorCode(err: unknown): string {
   const e = err as { code?: unknown } | null;
-  return typeof e?.code === "string" ? e.code : "";
+  return typeof e?.code === 'string' ? e.code : '';
 }
 
 function errorMessage(err: unknown): string {
   const e = err as { message?: unknown } | null;
-  return typeof e?.message === "string" ? e.message.toLowerCase() : "";
+  return typeof e?.message === 'string' ? e.message.toLowerCase() : '';
 }
 
 /** The client gave up (skip, pause, closed tab), so nothing should be retried. */
 function isClientAbort(err: unknown): boolean {
   const code = errorCode(err);
-  if (code === "ERR_STREAM_PREMATURE_CLOSE") return true;
-  return (
-    errorMessage(err).includes("aborted") ||
-    errorMessage(err).includes("premature close")
-  );
+  if (code === 'ERR_STREAM_PREMATURE_CLOSE') return true;
+  return errorMessage(err).includes('aborted') || errorMessage(err).includes('premature close');
 }
 
 /**
@@ -67,36 +60,23 @@ function isClientAbort(err: unknown): boolean {
  */
 function isRetryableUpstreamError(err: unknown): boolean {
   const code = errorCode(err);
-  if (
-    code === "ETIMEDOUT" ||
-    code === "ECONNREFUSED" ||
-    code === "EHOSTUNREACH"
-  )
-    return true;
+  if (code === 'ETIMEDOUT' || code === 'ECONNREFUSED' || code === 'EHOSTUNREACH') return true;
   const message = errorMessage(err);
-  return message.includes("timeout") || message.includes("socket hang up");
+  return message.includes('timeout') || message.includes('socket hang up');
 }
 
 function isRetryableStatus(statusCode: number): boolean {
-  return (
-    statusCode === 403 ||
-    statusCode === 410 ||
-    statusCode === 429 ||
-    statusCode >= 500
-  );
+  return statusCode === 403 || statusCode === 410 || statusCode === 429 || statusCode >= 500;
 }
 
-function requestUpstream(
-  url: URL,
-  headers: Record<string, string>,
-): Promise<IncomingMessage> {
+function requestUpstream(url: URL, headers: Record<string, string>): Promise<IncomingMessage> {
   return new Promise((resolve, reject) => {
-    const get = url.protocol === "https:" ? httpsGet : httpGet;
+    const get = url.protocol === 'https:' ? httpsGet : httpGet;
     const req = get(url, { headers }, resolve);
     req.setTimeout(UPSTREAM_TIMEOUT_MS, () =>
-      req.destroy(new Error("Upstream stream request timeout")),
+      req.destroy(new Error('Upstream stream request timeout')),
     );
-    req.on("error", reject);
+    req.on('error', reject);
   });
 }
 
@@ -129,18 +109,18 @@ function pipeUpstreamToClient(
     return;
   }
 
-  cache.sink.on("error", () => {
+  cache.sink.on('error', () => {
     // A broken cache sink must never take the client stream down with it.
     upstreamRes.unpipe(cache.sink);
   });
-  upstreamRes.on("error", () => {
+  upstreamRes.on('error', () => {
     cache.sink.destroy();
     void cache.abort();
   });
 
   // 'close' also fires after a *successful* end, so the cache is only aborted
   // when the client left before the body was complete.
-  res.on("close", () => {
+  res.on('close', () => {
     if (res.writableFinished) return;
     // destroy() alone emits neither 'finish' nor 'error', so the partial file
     // has to be removed here too or it lingers in the cache directory forever.
@@ -155,11 +135,7 @@ function pipeUpstreamToClient(
  * Serves a cached file with byte-range support. Returns false when the file
  * vanished, so the caller can fall back to upstream.
  */
-async function serveFromDisk(
-  filePath: string,
-  req: Request,
-  res: Response,
-): Promise<boolean> {
+async function serveFromDisk(filePath: string, req: Request, res: Response): Promise<boolean> {
   let stat: fs.Stats;
   try {
     stat = await fsp.stat(filePath);
@@ -168,44 +144,38 @@ async function serveFromDisk(
   }
 
   const total = stat.size;
-  res.setHeader("Accept-Ranges", "bytes");
-  res.setHeader("Content-Type", "audio/mp4");
-  res.setHeader("Cache-Control", "public, max-age=86400");
+  res.setHeader('Accept-Ranges', 'bytes');
+  res.setHeader('Content-Type', 'audio/mp4');
+  res.setHeader('Cache-Control', 'public, max-age=86400');
 
   const range = req.headers.range;
-  const match =
-    typeof range === "string" ? /^bytes=(\d*)-(\d*)$/.exec(range.trim()) : null;
+  const match = typeof range === 'string' ? /^bytes=(\d*)-(\d*)$/.exec(range.trim()) : null;
 
   if (match) {
     const start = match[1] ? Number.parseInt(match[1], 10) : 0;
     const end = match[2] ? Number.parseInt(match[2], 10) : total - 1;
 
-    if (
-      !Number.isFinite(start) ||
-      !Number.isFinite(end) ||
-      start > end ||
-      start >= total
-    ) {
-      res.status(416).setHeader("Content-Range", `bytes */${total}`);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || start >= total) {
+      res.status(416).setHeader('Content-Range', `bytes */${total}`);
       res.end();
       return true;
     }
 
     const lastByte = end >= total ? total - 1 : end;
     res.status(206);
-    res.setHeader("Content-Range", `bytes ${start}-${lastByte}/${total}`);
-    res.setHeader("Content-Length", String(lastByte - start + 1));
+    res.setHeader('Content-Range', `bytes ${start}-${lastByte}/${total}`);
+    res.setHeader('Content-Length', String(lastByte - start + 1));
 
     const stream = fs.createReadStream(filePath, { start, end: lastByte });
-    stream.on("error", () => !res.writableEnded && res.end());
+    stream.on('error', () => !res.writableEnded && res.end());
     stream.pipe(res);
     return true;
   }
 
   res.status(200);
-  res.setHeader("Content-Length", String(total));
+  res.setHeader('Content-Length', String(total));
   const stream = fs.createReadStream(filePath);
-  stream.on("error", () => !res.writableEnded && res.end());
+  stream.on('error', () => !res.writableEnded && res.end());
   stream.pipe(res);
   return true;
 }
@@ -216,11 +186,7 @@ async function serveFromDisk(
  * Responds on the given `res` and resolves either way; callers should not
  * write to it afterwards.
  */
-export async function streamTrack(
-  req: Request,
-  res: Response,
-  trackId: string,
-): Promise<void> {
+export async function streamTrack(req: Request, res: Response, trackId: string): Promise<void> {
   const id = trackId.trim();
 
   const range = req.headers.range;
@@ -229,20 +195,18 @@ export async function streamTrack(
   // serves ranged requests, so an open-ended range is sent by default. The
   // upstream 206 passes through unchanged, so the client still sees a normal
   // full-length stream.
-  headers.Range = typeof range === "string" && range ? range : "bytes=0-";
+  headers.Range = typeof range === 'string' && range ? range : 'bytes=0-';
 
   const cached = await getCachedAudio(id);
   if (cached && (await serveFromDisk(cached, req, res))) return;
 
   let clientGone = false;
-  req.on("close", () => {
+  req.on('close', () => {
     clientGone = true;
   });
 
   const clientLeft = (err?: unknown): boolean =>
-    clientGone ||
-    res.writableEnded ||
-    (err !== undefined && isClientAbort(err));
+    clientGone || res.writableEnded || (err !== undefined && isClientAbort(err));
 
   try {
     for (let attempt = 0; attempt < MAX_PROXY_ATTEMPTS; attempt += 1) {
@@ -272,7 +236,7 @@ export async function streamTrack(
         if (
           statusCode >= 300 &&
           statusCode < 400 &&
-          typeof location === "string" &&
+          typeof location === 'string' &&
           location &&
           redirectsLeft > 0
         ) {
@@ -287,18 +251,15 @@ export async function streamTrack(
           break;
         }
 
-        res.on("close", () => upstreamRes.destroy());
+        res.on('close', () => upstreamRes.destroy());
 
         // Range responses are partial by definition and must not be cached.
         const cache =
-          typeof range === "string" && range.length > 0
-            ? null
-            : AudioCacheWriter.start(id);
+          typeof range === 'string' && range.length > 0 ? null : AudioCacheWriter.start(id);
 
-        upstreamRes.on("error", (err: UpstreamFailure) => {
+        upstreamRes.on('error', (err: UpstreamFailure) => {
           if (clientLeft(err)) return;
-          if (!res.headersSent)
-            res.status(502).json({ message: "Failed to proxy stream" });
+          if (!res.headersSent) res.status(502).json({ message: 'Failed to proxy stream' });
           else res.end();
         });
 
@@ -307,19 +268,16 @@ export async function streamTrack(
       }
     }
 
-    if (!res.headersSent)
-      res.status(502).json({ message: "Failed to proxy stream" });
+    if (!res.headersSent) res.status(502).json({ message: 'Failed to proxy stream' });
   } catch (err) {
     if (isClientAbort(err)) return;
     if (err instanceof TrackUnavailableError) {
-      res
-        .status(404)
-        .json({ message: "Track is unavailable", reason: err.reason });
+      res.status(404).json({ message: 'Track is unavailable', reason: err.reason });
       return;
     }
     if (!res.headersSent) {
       log.error(err);
-      res.status(502).json({ message: "Failed to resolve stream URL" });
+      res.status(502).json({ message: 'Failed to resolve stream URL' });
     } else {
       res.end();
     }

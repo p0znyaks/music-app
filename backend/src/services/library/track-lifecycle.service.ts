@@ -1,7 +1,7 @@
-import { AppDataSource } from "../dataSource";
-import { FavoriteTrack } from "../../entities/favorite-track.entity";
-import { PlaylistTrack } from "../../entities/playlist-track.entity";
-import { TrackTag } from "../../entities/track-tag.entity";
+import { AppDataSource } from '../dataSource';
+import { FavoriteTrack } from '../../entities/favorite-track.entity';
+import { PlaylistTrack } from '../../entities/playlist-track.entity';
+import { TrackTag } from '../../entities/track-tag.entity';
 
 /**
  * Tags belong to a track, and a track only exists for a user while it sits in
@@ -40,13 +40,13 @@ export async function trackStillHasSource(
   }
 
   const qb = AppDataSource.getRepository(PlaylistTrack)
-    .createQueryBuilder("pt")
-    .innerJoin("pt.playlist", "p")
-    .where("p.user_id = :uid", { uid: userId })
-    .andWhere("pt.trackId = :tid", { tid: trackId });
+    .createQueryBuilder('pt')
+    .innerJoin('pt.playlist', 'p')
+    .where('p.user_id = :uid', { uid: userId })
+    .andWhere('pt.trackId = :tid', { tid: trackId });
 
   if (options.excludePlaylistId !== undefined) {
-    qb.andWhere("p.id != :pid", { pid: options.excludePlaylistId });
+    qb.andWhere('p.id != :pid', { pid: options.excludePlaylistId });
   }
 
   return qb.getExists();
@@ -77,15 +77,12 @@ export async function assessRemoval(
 }
 
 /** Removes the track's tags. Only valid once it has no source left. */
-export async function deleteTagsForTrack(
-  userId: number,
-  trackId: string,
-): Promise<void> {
+export async function deleteTagsForTrack(userId: number, trackId: string): Promise<void> {
   await AppDataSource.getRepository(TrackTag)
     .createQueryBuilder()
     .delete()
-    .where("user_id = :uid", { uid: userId })
-    .andWhere("track_id = :tid", { tid: trackId })
+    .where('user_id = :uid', { uid: userId })
+    .andWhere('track_id = :tid', { tid: trackId })
     .execute();
 }
 
@@ -98,15 +95,15 @@ export async function deleteTagsForTrack(
  */
 export async function pruneOrphanTags(userId: number): Promise<number> {
   const orphans = await AppDataSource.getRepository(TrackTag)
-    .createQueryBuilder("t")
-    .select("DISTINCT t.track_id", "trackId")
-    .where("t.user_id = :uid", { uid: userId })
-    .andWhere("t.track_id NOT LIKE :clipPrefix", { clipPrefix: "clip:%" })
+    .createQueryBuilder('t')
+    .select('DISTINCT t.track_id', 'trackId')
+    .where('t.user_id = :uid', { uid: userId })
+    .andWhere('t.track_id NOT LIKE :clipPrefix', { clipPrefix: 'clip:%' })
     .getRawMany<{ trackId: string }>();
 
   let removed = 0;
   for (const row of orphans) {
-    const trackId = (row.trackId ?? "").trim();
+    const trackId = (row.trackId ?? '').trim();
     if (!trackId) continue;
     if (await trackStillHasSource(userId, trackId)) continue;
     await deleteTagsForTrack(userId, trackId);

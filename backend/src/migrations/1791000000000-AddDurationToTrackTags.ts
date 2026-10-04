@@ -1,4 +1,4 @@
-import type { MigrationInterface, QueryRunner } from "typeorm";
+import type { MigrationInterface, QueryRunner } from 'typeorm';
 
 /**
  * Adds `duration` to `track_tags`.
@@ -12,7 +12,7 @@ import type { MigrationInterface, QueryRunner } from "typeorm";
  * length per track, so no tag row is left empty when its length is known.
  */
 export class AddDurationToTrackTags1791000000000 implements MigrationInterface {
-  name = "AddDurationToTrackTags1791000000000";
+  name = 'AddDurationToTrackTags1791000000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`ALTER TABLE "track_tags" ADD "duration" integer`);

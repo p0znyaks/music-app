@@ -1,6 +1,6 @@
-import { seededShuffle } from "../../utils/shuffle";
-import { normalizeDuration } from "../track-media.service";
-import type { RecoTrack } from "./reco.types";
+import { seededShuffle } from '../../utils/shuffle';
+import { normalizeDuration } from '../track-media.service';
+import type { RecoTrack } from './reco.types';
 
 export function asRecoTrack(row: {
   trackId: string;
@@ -19,14 +19,11 @@ export function asRecoTrack(row: {
 }
 
 /** Drops duplicate `trackId`s, keeping the first occurrence, up to `limit`. */
-export function takeUniqueTracks(
-  rows: readonly RecoTrack[],
-  limit: number,
-): RecoTrack[] {
+export function takeUniqueTracks(rows: readonly RecoTrack[], limit: number): RecoTrack[] {
   const out: RecoTrack[] = [];
   const seen = new Set<string>();
   for (const row of rows) {
-    const id = (row.trackId ?? "").trim();
+    const id = (row.trackId ?? '').trim();
     if (!id || seen.has(id)) continue;
     seen.add(id);
     out.push(row);
@@ -67,10 +64,7 @@ export function capArtists(
 }
 
 /** Artists ordered by how many tracks they appear on. */
-export function pickTopArtists(
-  tracks: ReadonlyArray<{ artist: string }>,
-  limit: number,
-): string[] {
+export function pickTopArtists(tracks: ReadonlyArray<{ artist: string }>, limit: number): string[] {
   const counts = new Map<string, number>();
   for (const row of tracks) {
     const artist = row.artist.trim();
@@ -91,33 +85,33 @@ export function pickTopArtists(
  * only endless "24/7 radio" style uploads are meant to be rejected.
  */
 const STREAM_TITLE_MARKERS = [
-  "top hits",
-  "top 100",
-  "top 50",
-  "top 40",
-  "top songs",
-  "vlog",
-  " dj mix",
-  "mega mix",
-  "mix 202",
-  "non stop",
-  "non-stop",
-  "24/7",
-  "24-7",
-  "24 hour",
-  "24hours",
-  "all day",
-  "live stream",
-  "livestream",
-  "hour radio",
-  "radio stream",
-  "lofi mix",
-  "lo-fi mix",
-  "chillhop radio",
-  "playlist radio",
-  "compilation",
-  "greatest hits",
-  "stream",
+  'top hits',
+  'top 100',
+  'top 50',
+  'top 40',
+  'top songs',
+  'vlog',
+  ' dj mix',
+  'mega mix',
+  'mix 202',
+  'non stop',
+  'non-stop',
+  '24/7',
+  '24-7',
+  '24 hour',
+  '24hours',
+  'all day',
+  'live stream',
+  'livestream',
+  'hour radio',
+  'radio stream',
+  'lofi mix',
+  'lo-fi mix',
+  'chillhop radio',
+  'playlist radio',
+  'compilation',
+  'greatest hits',
+  'stream',
 ];
 
 /** Anything longer than an hour is a stream upload, not a track. */
@@ -132,6 +126,6 @@ export function isLikelyCompilation(track: RecoTrack): boolean {
   const duration = normalizeDuration(track.duration);
   if (duration != null && duration > STREAM_MAX_DURATION_SEC) return true;
 
-  const title = (track.title ?? "").toLowerCase();
+  const title = (track.title ?? '').toLowerCase();
   return STREAM_TITLE_MARKERS.some((marker) => title.includes(marker));
 }

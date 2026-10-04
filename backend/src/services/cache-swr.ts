@@ -1,5 +1,5 @@
-import { createLogger } from "../logger";
-import { getRedis } from "./redis";
+import { createLogger } from '../logger';
+import { getRedis } from './redis';
 
 export interface CacheEnvelope<T> {
   v: 1;
@@ -7,7 +7,7 @@ export interface CacheEnvelope<T> {
   savedAt: number;
 }
 
-const log = createLogger("cache-swr");
+const log = createLogger('cache-swr');
 
 /**
  * Last value that loaded successfully, kept in memory after its Redis entry
@@ -44,11 +44,11 @@ export function stringifyEnvelope<T>(data: T): string {
 function parseEnvelope<T>(raw: string): CacheEnvelope<T> | null {
   try {
     const o = JSON.parse(raw) as unknown;
-    if (!o || typeof o !== "object") {
+    if (!o || typeof o !== 'object') {
       return null;
     }
     const rec = o as Record<string, unknown>;
-    if (rec.v !== 1 || !("data" in rec) || typeof rec.savedAt !== "number") {
+    if (rec.v !== 1 || !('data' in rec) || typeof rec.savedAt !== 'number') {
       return null;
     }
     return o as CacheEnvelope<T>;
@@ -108,7 +108,7 @@ export async function redisGetSWR<T>(
           const p = (async () => {
             try {
               const data = await loader();
-              await redis.set(key, stringifyEnvelope(data), "EX", ttlSec);
+              await redis.set(key, stringifyEnvelope(data), 'EX', ttlSec);
             } catch (e) {
               // The cached value stays as it is, so the next read still serves it.
               log.warn(`background refresh failed for ${key}:`, e);
@@ -139,7 +139,7 @@ async function runOnce<T>(
   const redis = getRedis();
   const req = loader()
     .then(async (data) => {
-      await redis.set(key, stringifyEnvelope(data), "EX", ttlSec);
+      await redis.set(key, stringifyEnvelope(data), 'EX', ttlSec);
       rememberGood(key, data);
       return data;
     })

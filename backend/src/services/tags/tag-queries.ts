@@ -1,9 +1,9 @@
-import { AppDataSource } from "../dataSource";
-import { TrackTag } from "../../entities/track-tag.entity";
-import { FavoriteTrack } from "../../entities/favorite-track.entity";
-import { PlaylistTrack } from "../../entities/playlist-track.entity";
-import { tagEqualsSql } from "./tag-normalize";
-import { pruneOrphanTags } from "../library/track-lifecycle.service";
+import { AppDataSource } from '../dataSource';
+import { TrackTag } from '../../entities/track-tag.entity';
+import { FavoriteTrack } from '../../entities/favorite-track.entity';
+import { PlaylistTrack } from '../../entities/playlist-track.entity';
+import { tagEqualsSql } from './tag-normalize';
+import { pruneOrphanTags } from '../library/track-lifecycle.service';
 
 /**
  * Every database access behind the tag feature.
@@ -23,10 +23,7 @@ export type TagRow = {
 };
 
 /** Tags are only allowed on tracks in the user's library. */
-export async function isTrackTaggable(
-  userId: number,
-  trackId: string,
-): Promise<boolean> {
+export async function isTrackTaggable(userId: number, trackId: string): Promise<boolean> {
   const favorite = await AppDataSource.getRepository(FavoriteTrack).findOne({
     where: { user: { id: userId }, trackId },
     select: { id: true },
@@ -34,10 +31,10 @@ export async function isTrackTaggable(
   if (favorite) return true;
 
   return AppDataSource.getRepository(PlaylistTrack)
-    .createQueryBuilder("pt")
-    .innerJoin("pt.playlist", "p")
-    .where("p.user_id = :uid", { uid: userId })
-    .andWhere("pt.trackId = :tid", { tid: trackId })
+    .createQueryBuilder('pt')
+    .innerJoin('pt.playlist', 'p')
+    .where('p.user_id = :uid', { uid: userId })
+    .andWhere('pt.trackId = :tid', { tid: trackId })
     .getExists();
 }
 
@@ -48,25 +45,22 @@ export async function tagExistsOnTrack(
   tagNorm: string,
 ): Promise<boolean> {
   const found = await AppDataSource.getRepository(TrackTag)
-    .createQueryBuilder("t")
-    .where("t.user_id = :uid", { uid: userId })
-    .andWhere("t.track_id = :tid", { tid: trackId })
-    .andWhere(`${tagEqualsSql("t.tag")} = :tagNorm`, { tagNorm })
+    .createQueryBuilder('t')
+    .where('t.user_id = :uid', { uid: userId })
+    .andWhere('t.track_id = :tid', { tid: trackId })
+    .andWhere(`${tagEqualsSql('t.tag')} = :tagNorm`, { tagNorm })
     .limit(1)
     .getOne();
   return found !== null;
 }
 
 /** Distinct tags on a track, oldest first — what the UI shows as chips. */
-export async function countDistinctTagsOnTrack(
-  userId: number,
-  trackId: string,
-): Promise<number> {
+export async function countDistinctTagsOnTrack(userId: number, trackId: string): Promise<number> {
   const raw = await AppDataSource.getRepository(TrackTag)
-    .createQueryBuilder("t")
-    .select(`COUNT(DISTINCT ${tagEqualsSql("t.tag")})`, "cnt")
-    .where("t.user_id = :uid", { uid: userId })
-    .andWhere("t.track_id = :tid", { tid: trackId })
+    .createQueryBuilder('t')
+    .select(`COUNT(DISTINCT ${tagEqualsSql('t.tag')})`, 'cnt')
+    .where('t.user_id = :uid', { uid: userId })
+    .andWhere('t.track_id = :tid', { tid: trackId })
     .getRawOne<{ cnt: string }>();
 
   const count = raw?.cnt ? Number.parseInt(raw.cnt, 10) : 0;
@@ -81,9 +75,9 @@ export async function deleteTrackTag(
   await AppDataSource.getRepository(TrackTag)
     .createQueryBuilder()
     .delete()
-    .where("user_id = :uid", { uid: userId })
-    .andWhere("track_id = :tid", { tid: trackId })
-    .andWhere(`${tagEqualsSql("tag")} = :tagNorm`, { tagNorm })
+    .where('user_id = :uid', { uid: userId })
+    .andWhere('track_id = :tid', { tid: trackId })
+    .andWhere(`${tagEqualsSql('tag')} = :tagNorm`, { tagNorm })
     .execute();
 }
 
@@ -99,17 +93,17 @@ export async function findTracksByTags(
   if (tagNorms.length === 0) return [];
 
   return AppDataSource.getRepository(TrackTag)
-    .createQueryBuilder("t")
-    .select("t.track_id", "trackId")
-    .addSelect("MIN(t.title)", "title")
-    .addSelect("MIN(t.artist)", "artist")
-    .addSelect("MIN(t.thumbnail_url)", "thumbnailUrl")
-    .addSelect("MAX(t.duration)", "duration")
-    .addSelect("MIN(t.added_at)", "addedAt")
-    .where("t.user_id = :uid", { uid: userId })
-    .andWhere(`${tagEqualsSql("t.tag")} IN (:...tagNorms)`, { tagNorms })
-    .groupBy("t.track_id")
-    .having(`COUNT(DISTINCT ${tagEqualsSql("t.tag")}) = :n`, {
+    .createQueryBuilder('t')
+    .select('t.track_id', 'trackId')
+    .addSelect('MIN(t.title)', 'title')
+    .addSelect('MIN(t.artist)', 'artist')
+    .addSelect('MIN(t.thumbnail_url)', 'thumbnailUrl')
+    .addSelect('MAX(t.duration)', 'duration')
+    .addSelect('MIN(t.added_at)', 'addedAt')
+    .where('t.user_id = :uid', { uid: userId })
+    .andWhere(`${tagEqualsSql('t.tag')} IN (:...tagNorms)`, { tagNorms })
+    .groupBy('t.track_id')
+    .having(`COUNT(DISTINCT ${tagEqualsSql('t.tag')}) = :n`, {
       n: tagNorms.length,
     })
     .getRawMany<TagRow>();
@@ -127,25 +121,25 @@ export type DistinctTagRow = {
  */
 export async function listDistinctTags(
   userId: number,
-  sort: "alpha" | "createdAt",
+  sort: 'alpha' | 'createdAt',
 ): Promise<DistinctTagRow[]> {
   // Reading the tag list is the moment a stale tag becomes visible, so this is
   // where the "a tag never outlives its track" invariant is restored.
   await pruneOrphanTags(userId);
 
-  const normalized = tagEqualsSql("t.tag");
+  const normalized = tagEqualsSql('t.tag');
   const qb = AppDataSource.getRepository(TrackTag)
-    .createQueryBuilder("t")
-    .select("MIN(t.tag)", "tag")
-    .addSelect("MIN(t.added_at)", "createdAt")
-    .addSelect("COUNT(DISTINCT t.track_id)", "usageCount")
-    .where("t.user_id = :uid", { uid: userId })
+    .createQueryBuilder('t')
+    .select('MIN(t.tag)', 'tag')
+    .addSelect('MIN(t.added_at)', 'createdAt')
+    .addSelect('COUNT(DISTINCT t.track_id)', 'usageCount')
+    .where('t.user_id = :uid', { uid: userId })
     .groupBy(normalized);
 
-  if (sort === "alpha") {
-    qb.orderBy(`MIN(${normalized})`, "ASC");
+  if (sort === 'alpha') {
+    qb.orderBy(`MIN(${normalized})`, 'ASC');
   } else {
-    qb.orderBy("MIN(t.added_at)", "DESC");
+    qb.orderBy('MIN(t.added_at)', 'DESC');
   }
 
   const raw = await qb.getRawMany<{
@@ -160,12 +154,9 @@ export async function listDistinctTags(
   }));
 }
 
-export async function listTagsForTrack(
-  userId: number,
-  trackId: string,
-): Promise<TrackTag[]> {
+export async function listTagsForTrack(userId: number, trackId: string): Promise<TrackTag[]> {
   return AppDataSource.getRepository(TrackTag).find({
     where: { user: { id: userId }, trackId },
-    order: { addedAt: "ASC" },
+    order: { addedAt: 'ASC' },
   });
 }

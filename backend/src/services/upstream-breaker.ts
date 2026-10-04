@@ -1,5 +1,5 @@
-import { createLogger } from "../logger";
-import { envInt } from "../env";
+import { createLogger } from '../logger';
+import { envInt } from '../env';
 
 /**
  * Tracks whether the fast InnerTube path is currently usable.
@@ -48,16 +48,14 @@ export class UpstreamBreaker {
     this.consecutiveFailures += 1;
     if (this.consecutiveFailures >= this.failureThreshold) {
       if (this.openedAt === 0) {
-        log.warn(
-          `upstream "${this.name}" failing (${reason}); bypassing for ${this.openMs}ms`,
-        );
+        log.warn(`upstream "${this.name}" failing (${reason}); bypassing for ${this.openMs}ms`);
       }
       this.openedAt = Date.now();
     }
   }
 
   get state(): string {
-    return this.openedAt === 0 ? "closed" : "open";
+    return this.openedAt === 0 ? 'closed' : 'open';
   }
 
   get failures(): number {
@@ -65,18 +63,18 @@ export class UpstreamBreaker {
   }
 }
 
-const log = createLogger("breaker");
+const log = createLogger('breaker');
 
 export const innertubeSearchBreaker = new UpstreamBreaker(
-  "innertube-search",
-  envInt("INNERTUBE_BREAKER_FAILURES", 4),
-  envInt("INNERTUBE_BREAKER_OPEN_MS", 45000),
+  'innertube-search',
+  envInt('INNERTUBE_BREAKER_FAILURES', 4),
+  envInt('INNERTUBE_BREAKER_OPEN_MS', 45000),
 );
 
 export const innertubeStreamBreaker = new UpstreamBreaker(
-  "innertube-stream",
-  envInt("INNERTUBE_BREAKER_FAILURES", 4),
-  envInt("INNERTUBE_BREAKER_OPEN_MS", 45000),
+  'innertube-stream',
+  envInt('INNERTUBE_BREAKER_FAILURES', 4),
+  envInt('INNERTUBE_BREAKER_OPEN_MS', 45000),
 );
 
 /**

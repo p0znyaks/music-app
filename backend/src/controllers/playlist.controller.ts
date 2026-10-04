@@ -1,16 +1,16 @@
-import { Request, Response } from "express";
-import { AppDataSource } from "../services/dataSource";
-import { Playlist } from "../entities/playlist.entity";
-import { PlaylistTrack } from "../entities/playlist-track.entity";
-import { User } from "../entities/user.entity";
-import { completeTrackMedia } from "../services/track-media.service";
-import { clipShortCode, loadClipTimes } from "../services/tags/clip-times";
+import { Request, Response } from 'express';
+import { AppDataSource } from '../services/dataSource';
+import { Playlist } from '../entities/playlist.entity';
+import { PlaylistTrack } from '../entities/playlist-track.entity';
+import { User } from '../entities/user.entity';
+import { completeTrackMedia } from '../services/track-media.service';
+import { clipShortCode, loadClipTimes } from '../services/tags/clip-times';
 import {
   assessRemoval,
   deleteTagsForTrack,
   trackStillHasSource,
-} from "../services/library/track-lifecycle.service";
-import { routeId, routeParam, wantsForce } from "../http/params";
+} from '../services/library/track-lifecycle.service';
+import { routeId, routeParam, wantsForce } from '../http/params';
 
 /** Longest playlist name the API accepts. */
 const MAX_NAME_LENGTH = 25;
@@ -29,10 +29,7 @@ type PlaylistTrackResponse = {
 };
 
 /** Finds a playlist owned by the caller, or null. */
-async function findOwnedPlaylist(
-  userId: number,
-  playlistId: number,
-): Promise<Playlist | null> {
+async function findOwnedPlaylist(userId: number, playlistId: number): Promise<Playlist | null> {
   return AppDataSource.getRepository(Playlist).findOne({
     where: { id: playlistId, user: { id: userId } },
   });
@@ -41,17 +38,14 @@ async function findOwnedPlaylist(
 /** POST /api/playlists */
 export async function createPlaylist(req: Request, res: Response) {
   const userId = req.user?.id;
-  if (userId === undefined)
-    return res.status(401).json({ message: "Unauthorized" });
+  if (userId === undefined) return res.status(401).json({ message: 'Unauthorized' });
 
   const name = req.body?.name;
-  if (typeof name !== "string" || !name.trim()) {
-    return res.status(400).json({ message: "name is required" });
+  if (typeof name !== 'string' || !name.trim()) {
+    return res.status(400).json({ message: 'name is required' });
   }
   if (name.trim().length > MAX_NAME_LENGTH) {
-    return res
-      .status(400)
-      .json({ message: `name must be at most ${MAX_NAME_LENGTH} characters` });
+    return res.status(400).json({ message: `name must be at most ${MAX_NAME_LENGTH} characters` });
   }
 
   const repo = AppDataSource.getRepository(Playlist);
@@ -71,16 +65,14 @@ export async function createPlaylist(req: Request, res: Response) {
 /** DELETE /api/playlists/:id */
 export async function deletePlaylist(req: Request, res: Response) {
   const userId = req.user?.id;
-  if (userId === undefined)
-    return res.status(401).json({ message: "Unauthorized" });
+  if (userId === undefined) return res.status(401).json({ message: 'Unauthorized' });
 
   const id = routeId(req.params.id);
-  if (id === null)
-    return res.status(400).json({ message: "Invalid playlist id" });
+  if (id === null) return res.status(400).json({ message: 'Invalid playlist id' });
 
   const repo = AppDataSource.getRepository(Playlist);
   const playlist = await findOwnedPlaylist(userId, id);
-  if (!playlist) return res.status(404).json({ message: "Playlist not found" });
+  if (!playlist) return res.status(404).json({ message: 'Playlist not found' });
 
   // Foreign keys require the child rows to go first.
   const trackRepo = AppDataSource.getRepository(PlaylistTrack);
@@ -92,9 +84,7 @@ export async function deletePlaylist(req: Request, res: Response) {
   await repo.remove(playlist);
 
   // A track only in this playlist is now an orphan, and its tags go with it.
-  const trackIds = [
-    ...new Set(rows.map((row) => (row.trackId ?? "").trim()).filter(Boolean)),
-  ];
+  const trackIds = [...new Set(rows.map((row) => (row.trackId ?? '').trim()).filter(Boolean))];
   for (const trackId of trackIds) {
     if (await trackStillHasSource(userId, trackId)) continue;
     await deleteTagsForTrack(userId, trackId);
@@ -106,12 +96,11 @@ export async function deletePlaylist(req: Request, res: Response) {
 /** GET /api/playlists */
 export async function listPlaylists(req: Request, res: Response) {
   const userId = req.user?.id;
-  if (userId === undefined)
-    return res.status(401).json({ message: "Unauthorized" });
+  if (userId === undefined) return res.status(401).json({ message: 'Unauthorized' });
 
   const list = await AppDataSource.getRepository(Playlist).find({
     where: { user: { id: userId } },
-    order: { createdAt: "DESC" },
+    order: { createdAt: 'DESC' },
   });
 
   return res.json(
@@ -126,24 +115,21 @@ export async function listPlaylists(req: Request, res: Response) {
 /** POST /api/playlists/:id/tracks */
 export async function addPlaylistTrack(req: Request, res: Response) {
   const userId = req.user?.id;
-  if (userId === undefined)
-    return res.status(401).json({ message: "Unauthorized" });
+  if (userId === undefined) return res.status(401).json({ message: 'Unauthorized' });
 
   const playlistId = routeId(req.params.id);
-  if (playlistId === null)
-    return res.status(400).json({ message: "Invalid playlist id" });
+  if (playlistId === null) return res.status(400).json({ message: 'Invalid playlist id' });
 
-  const { trackId, title, artist, thumbnailUrl, duration, isClip } =
-    req.body ?? {};
-  if (typeof trackId !== "string" || !trackId.trim()) {
-    return res.status(400).json({ message: "trackId is required" });
+  const { trackId, title, artist, thumbnailUrl, duration, isClip } = req.body ?? {};
+  if (typeof trackId !== 'string' || !trackId.trim()) {
+    return res.status(400).json({ message: 'trackId is required' });
   }
-  if (typeof title !== "string" || typeof artist !== "string") {
-    return res.status(400).json({ message: "title and artist are required" });
+  if (typeof title !== 'string' || typeof artist !== 'string') {
+    return res.status(400).json({ message: 'title and artist are required' });
   }
 
   const playlist = await findOwnedPlaylist(userId, playlistId);
-  if (!playlist) return res.status(404).json({ message: "Playlist not found" });
+  if (!playlist) return res.status(404).json({ message: 'Playlist not found' });
 
   const repo = AppDataSource.getRepository(PlaylistTrack);
   const normalizedTrackId = trackId.trim();
@@ -153,9 +139,9 @@ export async function addPlaylistTrack(req: Request, res: Response) {
   const duplicate =
     isClip === true
       ? await repo
-          .createQueryBuilder("pt")
-          .where("pt.playlist_id = :playlistId", { playlistId })
-          .andWhere("LOWER(TRIM(pt.title)) = :normalizedTitle", {
+          .createQueryBuilder('pt')
+          .where('pt.playlist_id = :playlistId', { playlistId })
+          .andWhere('LOWER(TRIM(pt.title)) = :normalizedTitle', {
             normalizedTitle: title.trim().toLowerCase(),
           })
           .getExists()
@@ -166,9 +152,7 @@ export async function addPlaylistTrack(req: Request, res: Response) {
   if (duplicate) {
     return res.status(409).json({
       message:
-        isClip === true
-          ? "Clip with this name already in playlist"
-          : "Track already in playlist",
+        isClip === true ? 'Clip with this name already in playlist' : 'Track already in playlist',
     });
   }
 
@@ -197,23 +181,21 @@ export async function addPlaylistTrack(req: Request, res: Response) {
 /** DELETE /api/playlists/:id/tracks/:trackId */
 export async function removePlaylistTrack(req: Request, res: Response) {
   const userId = req.user?.id;
-  if (userId === undefined)
-    return res.status(401).json({ message: "Unauthorized" });
+  if (userId === undefined) return res.status(401).json({ message: 'Unauthorized' });
 
   const id = routeId(req.params.id);
   const trackId = routeParam(req.params.trackId);
   if (id === null || !trackId)
-    return res.status(400).json({ message: "Invalid playlist or track id" });
+    return res.status(400).json({ message: 'Invalid playlist or track id' });
 
   const force = wantsForce(req.query);
 
   const playlist = await findOwnedPlaylist(userId, id);
-  if (!playlist) return res.status(404).json({ message: "Playlist not found" });
+  if (!playlist) return res.status(404).json({ message: 'Playlist not found' });
 
   const repo = AppDataSource.getRepository(PlaylistTrack);
   const row = await repo.findOne({ where: { playlist: { id }, trackId } });
-  if (!row)
-    return res.status(404).json({ message: "Track not found in playlist" });
+  if (!row) return res.status(404).json({ message: 'Track not found in playlist' });
 
   // Excluding this playlist, the track is orphaned only if nothing else holds it.
   const impact = await assessRemoval(userId, trackId, {
@@ -221,7 +203,7 @@ export async function removePlaylistTrack(req: Request, res: Response) {
   });
   if (!impact.stillReferenced && impact.tagCount > 0 && !force) {
     return res.status(409).json({
-      message: "Track has tags. Confirmation required.",
+      message: 'Track has tags. Confirmation required.',
       requiresConfirm: true,
       hasTags: true,
       tagCount: impact.tagCount,
@@ -240,19 +222,17 @@ export async function removePlaylistTrack(req: Request, res: Response) {
 /** GET /api/playlists/:id/tracks */
 export async function listPlaylistTracks(req: Request, res: Response) {
   const userId = req.user?.id;
-  if (userId === undefined)
-    return res.status(401).json({ message: "Unauthorized" });
+  if (userId === undefined) return res.status(401).json({ message: 'Unauthorized' });
 
   const id = routeId(req.params.id);
-  if (id === null)
-    return res.status(400).json({ message: "Invalid playlist id" });
+  if (id === null) return res.status(400).json({ message: 'Invalid playlist id' });
 
   const playlist = await findOwnedPlaylist(userId, id);
-  if (!playlist) return res.status(404).json({ message: "Playlist not found" });
+  if (!playlist) return res.status(404).json({ message: 'Playlist not found' });
 
   const tracks = await AppDataSource.getRepository(PlaylistTrack).find({
     where: { playlist: { id } },
-    order: { addedAt: "ASC" },
+    order: { addedAt: 'ASC' },
   });
 
   const clipTimes = await loadClipTimes(tracks.map((row) => row.trackId));

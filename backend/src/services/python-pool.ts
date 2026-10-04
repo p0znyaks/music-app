@@ -1,22 +1,22 @@
-import { randomUUID } from "crypto";
-import { spawn, type ChildProcess } from "child_process";
-import path from "path";
-import { createLogger } from "../logger";
-import { envIntOrZero } from "../env";
+import { randomUUID } from 'crypto';
+import { spawn, type ChildProcess } from 'child_process';
+import path from 'path';
+import { createLogger } from '../logger';
+import { envIntOrZero } from '../env';
 
 export type PythonWorkerAction =
-  | "ping"
-  | "search_albums"
-  | "search_artists"
-  | "search_songs"
-  | "get_album"
-  | "get_artist"
-  | "get_watch_playlist_radio"
-  | "get_song"
-  | "get_player_stream"
-  | "search_bundle"
-  | "reco_radio_batch"
-  | "reco_albums_batch";
+  | 'ping'
+  | 'search_albums'
+  | 'search_artists'
+  | 'search_songs'
+  | 'get_album'
+  | 'get_artist'
+  | 'get_watch_playlist_radio'
+  | 'get_song'
+  | 'get_player_stream'
+  | 'search_bundle'
+  | 'reco_radio_batch'
+  | 'reco_albums_batch';
 
 /**
  * Per-action budget for a worker command.
@@ -44,7 +44,7 @@ const ACTION_TIMEOUT_MS: Partial<Record<PythonWorkerAction, number>> = {
 };
 
 function timeoutForAction(action: PythonWorkerAction): number {
-  const override = envIntOrZero("PYTHON_CMD_TIMEOUT_MS", 0);
+  const override = envIntOrZero('PYTHON_CMD_TIMEOUT_MS', 0);
   if (override > 0) {
     return override;
   }
@@ -73,12 +73,12 @@ type Pending = {
 };
 
 function workerScriptPath(): string {
-  return path.join(process.cwd(), "scripts", "ytmusic_worker.py");
+  return path.join(process.cwd(), 'scripts', 'ytmusic_worker.py');
 }
 
 class PythonWorkerSlot {
   private child: ChildProcess | null = null;
-  private stdoutBuf = "";
+  private stdoutBuf = '';
   private readonly pendingById = new Map<string, Pending>();
   private inflightCount = 0;
 
@@ -89,19 +89,19 @@ class PythonWorkerSlot {
   }
 
   private spawnChild(): ChildProcess {
-    const child = spawn("python3", [this.scriptPath], {
-      stdio: ["pipe", "pipe", "pipe"],
+    const child = spawn('python3', [this.scriptPath], {
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
-    child.stderr?.setEncoding("utf8");
-    child.stderr?.on("data", (chunk: string) => {
-      if (process.env.PYTHON_WORKER_LOG === "1") {
+    child.stderr?.setEncoding('utf8');
+    child.stderr?.on('data', (chunk: string) => {
+      if (process.env.PYTHON_WORKER_LOG === '1') {
         process.stderr.write(chunk);
       }
     });
-    child.on("error", (err) => {
-      log.error("worker spawn error:", err);
+    child.on('error', (err) => {
+      log.error('worker spawn error:', err);
     });
-    child.on("close", (code) => {
+    child.on('close', (code) => {
       if (this.child === child) {
         this.child = null;
       }
@@ -112,8 +112,8 @@ class PythonWorkerSlot {
     });
     const stdout = child.stdout;
     if (stdout) {
-      stdout.setEncoding("utf8");
-      stdout.on("data", (chunk: string) => this.onStdoutData(chunk));
+      stdout.setEncoding('utf8');
+      stdout.on('data', (chunk: string) => this.onStdoutData(chunk));
     }
     return child;
   }
@@ -122,7 +122,7 @@ class PythonWorkerSlot {
     if (this.child && !this.child.killed) {
       return this.child;
     }
-    this.stdoutBuf = "";
+    this.stdoutBuf = '';
     this.child = this.spawnChild();
     return this.child;
   }
@@ -139,7 +139,7 @@ class PythonWorkerSlot {
   private onStdoutData(chunk: string): void {
     this.stdoutBuf += chunk;
     for (;;) {
-      const nl = this.stdoutBuf.indexOf("\n");
+      const nl = this.stdoutBuf.indexOf('\n');
       if (nl < 0) {
         break;
       }
@@ -155,7 +155,7 @@ class PythonWorkerSlot {
         continue;
       }
       const id = parsed.id;
-      if (!id || typeof id !== "string") {
+      if (!id || typeof id !== 'string') {
         continue;
       }
       const pending = this.pendingById.get(id);
@@ -169,7 +169,7 @@ class PythonWorkerSlot {
         this.inflightCount = Math.max(0, this.inflightCount - 1);
         const err = parsed as PoolResponseErr;
         const msg = err.trace ? `${err.error}\n${err.trace}` : err.error;
-        pending.reject(new Error(msg || "python worker error"));
+        pending.reject(new Error(msg || 'python worker error'));
         continue;
       }
 
@@ -181,10 +181,7 @@ class PythonWorkerSlot {
     }
   }
 
-  async call<T>(
-    action: PythonWorkerAction,
-    args: Record<string, unknown> = {},
-  ): Promise<T> {
+  async call<T>(action: PythonWorkerAction, args: Record<string, unknown> = {}): Promise<T> {
     // Retrying helps with a brief blip, but three full deadlines in a row would
     // let a stuck upstream hold the caller for minutes. The retry loop is
     // therefore bounded by one overall budget instead of three per-attempt ones.
@@ -200,17 +197,11 @@ class PythonWorkerSlot {
       const payload = `${JSON.stringify({ id, action, args })}\n`;
       try {
         const child = this.ensureChild();
-        return await this.writeAndWaitResponse<T>(
-          child,
-          id,
-          payload,
-          action,
-          remaining,
-        );
+        return await this.writeAndWaitResponse<T>(child, id, payload, action, remaining);
       } catch (e) {
         lastErr = e;
         this.killChild();
-        this.stdoutBuf = "";
+        this.stdoutBuf = '';
       }
     }
     throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
@@ -219,7 +210,7 @@ class PythonWorkerSlot {
   private killChild(): void {
     if (this.child && !this.child.killed) {
       try {
-        this.child.kill("SIGTERM");
+        this.child.kill('SIGTERM');
       } catch {
         /* ignore */
       }
@@ -237,7 +228,7 @@ class PythonWorkerSlot {
     return new Promise((resolve, reject) => {
       const stdin = child.stdin;
       if (!stdin) {
-        reject(new Error("python worker: missing stdin"));
+        reject(new Error('python worker: missing stdin'));
         return;
       }
 
@@ -246,11 +237,9 @@ class PythonWorkerSlot {
         // A stuck command leaves the worker unable to answer anything queued
         // behind it, so this slot's other commands are failed right away
         // instead of each burning their own deadline.
-        this.rejectAllPending(
-          new Error(`python worker: ${action} exceeded ${budgetMs}ms`),
-        );
+        this.rejectAllPending(new Error(`python worker: ${action} exceeded ${budgetMs}ms`));
         this.killChild();
-        this.stdoutBuf = "";
+        this.stdoutBuf = '';
       }, budgetMs);
 
       const pending: Pending = {
@@ -271,7 +260,7 @@ class PythonWorkerSlot {
       try {
         const ok = stdin.write(payload);
         if (!ok) {
-          stdin.once("drain", () => undefined);
+          stdin.once('drain', () => undefined);
         }
       } catch (e) {
         this.pendingById.delete(expectedId);
@@ -289,10 +278,7 @@ export class PythonPool {
   private readonly slots: PythonWorkerSlot[];
 
   constructor(count: number, scriptPath: string) {
-    this.slots = Array.from(
-      { length: count },
-      () => new PythonWorkerSlot(scriptPath),
-    );
+    this.slots = Array.from({ length: count }, () => new PythonWorkerSlot(scriptPath));
   }
 
   private pickSlot(): PythonWorkerSlot {
@@ -308,30 +294,27 @@ export class PythonPool {
     return best;
   }
 
-  async call<T>(
-    action: PythonWorkerAction,
-    args: Record<string, unknown> = {},
-  ): Promise<T> {
+  async call<T>(action: PythonWorkerAction, args: Record<string, unknown> = {}): Promise<T> {
     const slot = this.pickSlot();
     return slot.call<T>(action, args);
   }
 
   async pingAll(): Promise<void> {
-    await Promise.all(this.slots.map((s) => s.call<string>("ping", {})));
+    await Promise.all(this.slots.map((s) => s.call<string>('ping', {})));
   }
 }
 
-const log = createLogger("python-pool");
+const log = createLogger('python-pool');
 
 export function getPythonPool(): PythonPool | null {
   return globalPool;
 }
 
 export async function startPythonPool(): Promise<boolean> {
-  const n = envIntOrZero("PYTHON_WORKERS", 2);
+  const n = envIntOrZero('PYTHON_WORKERS', 2);
   if (n <= 0) {
     globalPool = null;
-    log.info("disabled (PYTHON_WORKERS=0)");
+    log.info('disabled (PYTHON_WORKERS=0)');
     return false;
   }
   try {
@@ -341,7 +324,7 @@ export async function startPythonPool(): Promise<boolean> {
     log.info(`started with ${n} workers`);
     return true;
   } catch (e) {
-    log.error("failed to start:", e);
+    log.error('failed to start:', e);
     globalPool = null;
     return false;
   }

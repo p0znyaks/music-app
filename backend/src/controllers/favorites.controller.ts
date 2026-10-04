@@ -1,14 +1,11 @@
-import { Request, Response } from "express";
-import { AppDataSource } from "../services/dataSource";
-import { FavoriteTrack } from "../entities/favorite-track.entity";
-import {
-  assessRemoval,
-  deleteTagsForTrack,
-} from "../services/library/track-lifecycle.service";
-import { User } from "../entities/user.entity";
-import { completeTrackMedia } from "../services/track-media.service";
-import { clipShortCode, loadClipTimes } from "../services/tags/clip-times";
-import { routeParam, wantsForce } from "../http/params";
+import { Request, Response } from 'express';
+import { AppDataSource } from '../services/dataSource';
+import { FavoriteTrack } from '../entities/favorite-track.entity';
+import { assessRemoval, deleteTagsForTrack } from '../services/library/track-lifecycle.service';
+import { User } from '../entities/user.entity';
+import { completeTrackMedia } from '../services/track-media.service';
+import { clipShortCode, loadClipTimes } from '../services/tags/clip-times';
+import { routeParam, wantsForce } from '../http/params';
 
 type FavoriteTrackResponse = {
   id: number;
@@ -26,15 +23,15 @@ type FavoriteTrackResponse = {
 export async function addFavorite(req: Request, res: Response) {
   const userId = req.user?.id;
   if (userId === undefined) {
-    return res.status(401).json({ message: "Unauthorized" });
+    return res.status(401).json({ message: 'Unauthorized' });
   }
 
   const { trackId, title, artist, thumbnailUrl, duration } = req.body ?? {};
-  if (typeof trackId !== "string" || !trackId.trim()) {
-    return res.status(400).json({ message: "trackId is required" });
+  if (typeof trackId !== 'string' || !trackId.trim()) {
+    return res.status(400).json({ message: 'trackId is required' });
   }
-  if (typeof title !== "string" || typeof artist !== "string") {
-    return res.status(400).json({ message: "title and artist are required" });
+  if (typeof title !== 'string' || typeof artist !== 'string') {
+    return res.status(400).json({ message: 'title and artist are required' });
   }
 
   const repo = AppDataSource.getRepository(FavoriteTrack);
@@ -42,7 +39,7 @@ export async function addFavorite(req: Request, res: Response) {
     where: { user: { id: userId }, trackId: trackId.trim() },
   });
   if (existing) {
-    return res.status(409).json({ message: "Already in favorites" });
+    return res.status(409).json({ message: 'Already in favorites' });
   }
 
   // Duration and artwork are resolved before the write so the stored row is
@@ -74,12 +71,12 @@ export async function addFavorite(req: Request, res: Response) {
 export async function removeFavorite(req: Request, res: Response) {
   const userId = req.user?.id;
   if (userId === undefined) {
-    return res.status(401).json({ message: "Unauthorized" });
+    return res.status(401).json({ message: 'Unauthorized' });
   }
 
   const trackId = routeParam(req.params.trackId);
   if (!trackId) {
-    return res.status(400).json({ message: "trackId is required" });
+    return res.status(400).json({ message: 'trackId is required' });
   }
 
   const force = wantsForce(req.query);
@@ -89,7 +86,7 @@ export async function removeFavorite(req: Request, res: Response) {
     where: { user: { id: userId }, trackId },
   });
   if (!row) {
-    return res.status(404).json({ message: "Favorite not found" });
+    return res.status(404).json({ message: 'Favorite not found' });
   }
 
   // Removing from favorites orphans the track only if no playlist holds it.
@@ -98,7 +95,7 @@ export async function removeFavorite(req: Request, res: Response) {
   });
   if (!impact.stillReferenced && impact.tagCount > 0 && !force) {
     return res.status(409).json({
-      message: "Track has tags. Confirmation required.",
+      message: 'Track has tags. Confirmation required.',
       requiresConfirm: true,
       hasTags: true,
       tagCount: impact.tagCount,
@@ -117,13 +114,13 @@ export async function removeFavorite(req: Request, res: Response) {
 export async function listFavorites(req: Request, res: Response) {
   const userId = req.user?.id;
   if (userId === undefined) {
-    return res.status(401).json({ message: "Unauthorized" });
+    return res.status(401).json({ message: 'Unauthorized' });
   }
 
   const repo = AppDataSource.getRepository(FavoriteTrack);
   const rows = await repo.find({
     where: { user: { id: userId } },
-    order: { addedAt: "DESC" },
+    order: { addedAt: 'DESC' },
   });
 
   const clipTimes = await loadClipTimes(rows.map((row) => row.trackId));

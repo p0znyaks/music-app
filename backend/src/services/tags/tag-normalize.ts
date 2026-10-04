@@ -28,16 +28,16 @@ export function normTag(value: string): string {
  * tags are rendered as chips rather than hashtags.
  */
 export function cleanTagInput(raw: unknown): CleanTag | TagError {
-  if (typeof raw !== "string") {
-    return { ok: false, message: "tag is required" };
+  if (typeof raw !== 'string') {
+    return { ok: false, message: 'tag is required' };
   }
 
   const display = raw.trim();
   if (!display) {
-    return { ok: false, message: "tag is required" };
+    return { ok: false, message: 'tag is required' };
   }
-  if (display.includes("#")) {
-    return { ok: false, message: "tag must not include #" };
+  if (display.includes('#')) {
+    return { ok: false, message: 'tag must not include #' };
   }
   if (display.length > MAX_TAG_LENGTH) {
     return {

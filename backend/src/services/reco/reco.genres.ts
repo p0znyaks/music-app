@@ -1,40 +1,40 @@
-import { getPersonalizedFallbackGenres } from "./reco.config";
-import { normalizeDuration } from "../track-media.service";
-import type { RecoAlbum, RecoTrack } from "./reco.types";
+import { getPersonalizedFallbackGenres } from './reco.config';
+import { normalizeDuration } from '../track-media.service';
+import type { RecoAlbum, RecoTrack } from './reco.types';
 
 /** More specific genres first — used in classification loops (first match wins). */
 const GENRE_KEYWORDS: Record<string, string[]> = {
-  "death metal": ["death metal", "deathcore"],
-  "black metal": ["black metal"],
-  metalcore: ["metalcore"],
-  metal: ["metal", "thrash", "doom", "groove metal"],
-  "hard rock": ["hard rock"],
-  punk: ["punk", "hardcore punk"],
-  rock: ["rock", "classic rock", "post rock"],
-  alternative: ["alternative", "alt"],
-  indie: ["indie", "dream pop", "shoegaze"],
-  pop: ["pop", "synthpop"],
-  "hip hop": ["hip hop", "hip-hop", "boom bap"],
-  rap: ["rap", "trap", "drill"],
-  electronic: ["electronic", "edm", "electro"],
-  house: ["house", "tech house", "deep house"],
-  ambient: ["ambient", "chill"],
-  lofi: ["lofi", "lo-fi"],
-  jazz: ["jazz", "fusion"],
-  blues: ["blues"],
+  'death metal': ['death metal', 'deathcore'],
+  'black metal': ['black metal'],
+  metalcore: ['metalcore'],
+  metal: ['metal', 'thrash', 'doom', 'groove metal'],
+  'hard rock': ['hard rock'],
+  punk: ['punk', 'hardcore punk'],
+  rock: ['rock', 'classic rock', 'post rock'],
+  alternative: ['alternative', 'alt'],
+  indie: ['indie', 'dream pop', 'shoegaze'],
+  pop: ['pop', 'synthpop'],
+  'hip hop': ['hip hop', 'hip-hop', 'boom bap'],
+  rap: ['rap', 'trap', 'drill'],
+  electronic: ['electronic', 'edm', 'electro'],
+  house: ['house', 'tech house', 'deep house'],
+  ambient: ['ambient', 'chill'],
+  lofi: ['lofi', 'lo-fi'],
+  jazz: ['jazz', 'fusion'],
+  blues: ['blues'],
 };
 
 /** Broad genre each narrow genre rolls up into, used to avoid rejecting a track
  *  that merely belongs to a neighbouring genre. */
 const GENRE_PARENT: Record<string, string> = {
-  "death metal": "metal",
-  "black metal": "metal",
-  metalcore: "metal",
-  "hard rock": "rock",
-  punk: "rock",
-  house: "electronic",
-  ambient: "electronic",
-  rap: "hip hop",
+  'death metal': 'metal',
+  'black metal': 'metal',
+  metalcore: 'metal',
+  'hard rock': 'rock',
+  punk: 'rock',
+  house: 'electronic',
+  ambient: 'electronic',
+  rap: 'hip hop',
 };
 
 function normalizeText(value: string): string {
@@ -42,9 +42,9 @@ function normalizeText(value: string): string {
     value
       .trim()
       .toLowerCase()
-      .normalize("NFKD")
+      .normalize('NFKD')
       // Strip combining diacritical marks so "Beyoncé" matches "beyonce".
-      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[\u0300-\u036f]/g, '')
   );
 }
 
@@ -63,11 +63,7 @@ function isGenreCompatible(track: RecoTrack, targetGenre: string): boolean {
   return true;
 }
 
-function collectGenresFromText(
-  text: string,
-  score: Map<string, number>,
-  weight: number,
-): void {
+function collectGenresFromText(text: string, score: Map<string, number>, weight: number): void {
   const src = normalizeText(text);
   if (!src) return;
   for (const [genre, keywords] of Object.entries(GENRE_KEYWORDS)) {
@@ -86,10 +82,7 @@ function rankGenres(score: Map<string, number>, limit: number): string[] {
     .map(([genre]) => genre);
 }
 
-function extractGenresFromTracks(
-  tracks: readonly RecoTrack[],
-  limit = 8,
-): string[] {
+function extractGenresFromTracks(tracks: readonly RecoTrack[], limit = 8): string[] {
   const score = new Map<string, number>();
   for (const track of tracks) {
     collectGenresFromText(track.title, score, 1);
@@ -98,10 +91,7 @@ function extractGenresFromTracks(
   return rankGenres(score, limit);
 }
 
-function extractGenresFromAlbums(
-  albums: readonly RecoAlbum[],
-  limit = 8,
-): string[] {
+function extractGenresFromAlbums(albums: readonly RecoAlbum[], limit = 8): string[] {
   const score = new Map<string, number>();
   for (const album of albums) {
     collectGenresFromText(album.title, score, 1);
@@ -133,10 +123,7 @@ export function getUserGenres(params: {
 }
 
 /** Tracks of the seed list that belong to `genre`, for prefilling a genre block. */
-export function tracksMatchingGenre(
-  tracks: readonly RecoTrack[],
-  genre: string,
-): RecoTrack[] {
+export function tracksMatchingGenre(tracks: readonly RecoTrack[], genre: string): RecoTrack[] {
   const keywords = GENRE_KEYWORDS[genre];
   if (!keywords) return [];
   return tracks.filter((track) => {
@@ -146,13 +133,8 @@ export function tracksMatchingGenre(
 }
 
 /** Genre search pool: real songs of that genre, with a known length. */
-export function filterGenrePool(
-  songs: readonly RecoTrack[],
-  genre: string,
-): RecoTrack[] {
+export function filterGenrePool(songs: readonly RecoTrack[], genre: string): RecoTrack[] {
   return songs.filter(
-    (track) =>
-      normalizeDuration(track.duration) != null &&
-      isGenreCompatible(track, genre),
+    (track) => normalizeDuration(track.duration) != null && isGenreCompatible(track, genre),
   );
 }

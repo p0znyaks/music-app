@@ -1,6 +1,6 @@
-import { Router } from "express";
-import { proxyImage } from "../controllers/image.controller";
+import { Router } from 'express';
+import { proxyImage } from '../controllers/image.controller';
 
 export const imageRouter = Router();
 
-imageRouter.get("/images/proxy", proxyImage);
+imageRouter.get('/images/proxy', proxyImage);

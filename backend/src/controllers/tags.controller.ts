@@ -1,13 +1,9 @@
-import { Request, Response } from "express";
-import { AppDataSource } from "../services/dataSource";
-import { TrackTag } from "../entities/track-tag.entity";
-import { User } from "../entities/user.entity";
-import { completeTrackMedia } from "../services/track-media.service";
-import {
-  MAX_TAGS_PER_TRACK,
-  cleanTagInput,
-  normTag,
-} from "../services/tags/tag-normalize";
+import { Request, Response } from 'express';
+import { AppDataSource } from '../services/dataSource';
+import { TrackTag } from '../entities/track-tag.entity';
+import { User } from '../entities/user.entity';
+import { completeTrackMedia } from '../services/track-media.service';
+import { MAX_TAGS_PER_TRACK, cleanTagInput, normTag } from '../services/tags/tag-normalize';
 import {
   countDistinctTagsOnTrack,
   deleteTrackTag,
@@ -15,14 +11,14 @@ import {
   listDistinctTags as queryDistinctTags,
   listTagsForTrack,
   tagExistsOnTrack,
-} from "../services/tags/tag-queries";
+} from '../services/tags/tag-queries';
 import {
   buildMoodPlaylist,
   buildTagsPlaylist,
   purgeTagPlaylists,
-} from "../services/tags/tag-playlists";
-import { routeParam } from "../http/params";
-import { pruneOrphanTags } from "../services/library/track-lifecycle.service";
+} from '../services/tags/tag-playlists';
+import { routeParam } from '../http/params';
+import { pruneOrphanTags } from '../services/library/track-lifecycle.service';
 
 /**
  * Tag endpoints.
@@ -35,20 +31,19 @@ function requireUserId(req: Request): number | null {
   return req.user?.id === undefined ? null : req.user.id;
 }
 
-type SortOrder = "alpha" | "createdAt";
+type SortOrder = 'alpha' | 'createdAt';
 
 /** POST /api/tags — tags a track the user has saved. */
 export async function addTag(req: Request, res: Response) {
   const userId = requireUserId(req);
-  if (userId === null) return res.status(401).json({ message: "Unauthorized" });
+  if (userId === null) return res.status(401).json({ message: 'Unauthorized' });
 
-  const { trackId, title, artist, thumbnailUrl, duration, tag } =
-    req.body ?? {};
-  if (typeof trackId !== "string" || !trackId.trim()) {
-    return res.status(400).json({ message: "trackId is required" });
+  const { trackId, title, artist, thumbnailUrl, duration, tag } = req.body ?? {};
+  if (typeof trackId !== 'string' || !trackId.trim()) {
+    return res.status(400).json({ message: 'trackId is required' });
   }
-  if (typeof title !== "string" || typeof artist !== "string") {
-    return res.status(400).json({ message: "title and artist are required" });
+  if (typeof title !== 'string' || typeof artist !== 'string') {
+    return res.status(400).json({ message: 'title and artist are required' });
   }
 
   const cleaned = cleanTagInput(tag);
@@ -66,18 +61,14 @@ export async function addTag(req: Request, res: Response) {
   // Reported in order of how fundamental the rule is.
   if (!taggable) {
     return res.status(403).json({
-      message: "Tags can be added only to tracks in playlists or favorites",
+      message: 'Tags can be added only to tracks in playlists or favorites',
     });
   }
   if (alreadyTagged) {
-    return res
-      .status(409)
-      .json({ message: "Tag already exists for this track" });
+    return res.status(409).json({ message: 'Tag already exists for this track' });
   }
   if (tagCount >= MAX_TAGS_PER_TRACK) {
-    return res
-      .status(409)
-      .json({ message: `A track can have up to ${MAX_TAGS_PER_TRACK} tags` });
+    return res.status(409).json({ message: `A track can have up to ${MAX_TAGS_PER_TRACK} tags` });
   }
 
   // The tag row stores the length itself, so building a playlist by mood never
@@ -122,12 +113,12 @@ export async function addTag(req: Request, res: Response) {
 /** GET /api/tags/distinct — tag labels with usage counts. */
 export async function listDistinctTags(req: Request, res: Response) {
   const userId = requireUserId(req);
-  if (userId === null) return res.status(401).json({ message: "Unauthorized" });
+  if (userId === null) return res.status(401).json({ message: 'Unauthorized' });
 
   const rawSort = (req.query as { sort?: unknown }).sort;
-  const sort: SortOrder = rawSort === "alpha" ? "alpha" : "createdAt";
-  if (rawSort !== undefined && rawSort !== "alpha" && rawSort !== "createdAt") {
-    return res.status(400).json({ message: "Invalid sort" });
+  const sort: SortOrder = rawSort === 'alpha' ? 'alpha' : 'createdAt';
+  if (rawSort !== undefined && rawSort !== 'alpha' && rawSort !== 'createdAt') {
+    return res.status(400).json({ message: 'Invalid sort' });
   }
 
   return res.json(await queryDistinctTags(userId, sort));
@@ -136,10 +127,10 @@ export async function listDistinctTags(req: Request, res: Response) {
 /** GET /api/tags/track/:trackId — chips on one track. */
 export async function listTrackTags(req: Request, res: Response) {
   const userId = requireUserId(req);
-  if (userId === null) return res.status(401).json({ message: "Unauthorized" });
+  if (userId === null) return res.status(401).json({ message: 'Unauthorized' });
 
   const trackId = routeParam(req.params.trackId).trim();
-  if (!trackId) return res.status(400).json({ message: "trackId is required" });
+  if (!trackId) return res.status(400).json({ message: 'trackId is required' });
 
   const rows = await listTagsForTrack(userId, trackId);
 
@@ -158,10 +149,10 @@ export async function listTrackTags(req: Request, res: Response) {
 /** DELETE /api/tags/track/:trackId/:tag */
 export async function removeTrackTag(req: Request, res: Response) {
   const userId = requireUserId(req);
-  if (userId === null) return res.status(401).json({ message: "Unauthorized" });
+  if (userId === null) return res.status(401).json({ message: 'Unauthorized' });
 
   const trackId = routeParam(req.params.trackId).trim();
-  if (!trackId) return res.status(400).json({ message: "trackId is required" });
+  if (!trackId) return res.status(400).json({ message: 'trackId is required' });
 
   const cleaned = cleanTagInput(routeParam(req.params.tag));
   if (!cleaned.ok) return res.status(400).json({ message: cleaned.message });
@@ -175,7 +166,7 @@ export async function removeTrackTag(req: Request, res: Response) {
 /** GET /api/tags/mood/:tag — playlist for a single mood. */
 export async function moodPlaylist(req: Request, res: Response) {
   const userId = requireUserId(req);
-  if (userId === null) return res.status(401).json({ message: "Unauthorized" });
+  if (userId === null) return res.status(401).json({ message: 'Unauthorized' });
 
   const cleaned = cleanTagInput(routeParam(req.params.tag));
   if (!cleaned.ok) return res.status(400).json({ message: cleaned.message });
@@ -186,20 +177,17 @@ export async function moodPlaylist(req: Request, res: Response) {
 /** GET /api/tags/playlist?tags=a&tags=b — playlist for up to four tags. */
 export async function tagsPlaylist(req: Request, res: Response) {
   const userId = requireUserId(req);
-  if (userId === null) return res.status(401).json({ message: "Unauthorized" });
+  if (userId === null) return res.status(401).json({ message: 'Unauthorized' });
 
   const rawTags = (req.query as { tags?: unknown }).tags;
   const requested: string[] = Array.isArray(rawTags)
     ? rawTags
-    : typeof rawTags === "string"
+    : typeof rawTags === 'string'
       ? [rawTags]
       : [];
-  if (requested.length === 0)
-    return res.status(400).json({ message: "tags is required" });
+  if (requested.length === 0) return res.status(400).json({ message: 'tags is required' });
   if (requested.length > MAX_TAGS_PER_TRACK) {
-    return res
-      .status(400)
-      .json({ message: `Up to ${MAX_TAGS_PER_TRACK} tags are allowed` });
+    return res.status(400).json({ message: `Up to ${MAX_TAGS_PER_TRACK} tags are allowed` });
   }
 
   const cleaned = requested.map((tag) => cleanTagInput(tag));
@@ -208,7 +196,7 @@ export async function tagsPlaylist(req: Request, res: Response) {
 
   const tags = cleaned as { ok: true; display: string; norm: string }[];
   if (new Set(tags.map((tag) => tag.norm)).size !== tags.length) {
-    return res.status(400).json({ message: "Duplicate tags are not allowed" });
+    return res.status(400).json({ message: 'Duplicate tags are not allowed' });
   }
 
   return res.json(await buildTagsPlaylist(userId, tags));

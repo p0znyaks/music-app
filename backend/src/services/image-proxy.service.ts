@@ -1,12 +1,12 @@
-import { AsyncSemaphore } from "../env";
-import { getRedis } from "./redis";
+import { AsyncSemaphore } from '../env';
+import { getRedis } from './redis';
 
-const IMAGE_PROXY_PREFIX = "/api/images/proxy?u=";
+const IMAGE_PROXY_PREFIX = '/api/images/proxy?u=';
 const IMAGE_CACHE_TTL_SEC = 60 * 60 * 24 * 7;
 const MAX_RETRIES = 3;
 const MAX_CONCURRENCY = 4;
 const FETCH_TIMEOUT_MS = 12000;
-const YT_AVATAR_STYLE = "s512-c-k-c0x00ffffff-no-rj";
+const YT_AVATAR_STYLE = 's512-c-k-c0x00ffffff-no-rj';
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -15,13 +15,13 @@ function sleep(ms: number): Promise<void> {
 function isPrivateHost(hostname: string): boolean {
   const host = hostname.trim().toLowerCase();
   if (!host) return true;
-  if (host === "localhost" || host === "::1") return true;
+  if (host === 'localhost' || host === '::1') return true;
   if (/^127\.\d+\.\d+\.\d+$/.test(host)) return true;
   if (/^10\.\d+\.\d+\.\d+$/.test(host)) return true;
   if (/^192\.168\.\d+\.\d+$/.test(host)) return true;
   const m = /^172\.(\d+)\.\d+\.\d+$/.exec(host);
   if (m) {
-    const n = Number.parseInt(m[1] ?? "", 10);
+    const n = Number.parseInt(m[1] ?? '', 10);
     if (Number.isFinite(n) && n >= 16 && n <= 31) return true;
   }
   return false;
@@ -29,7 +29,7 @@ function isPrivateHost(hostname: string): boolean {
 
 function isGoogleImageHost(hostname: string): boolean {
   const host = hostname.trim().toLowerCase();
-  return host.endsWith(".ggpht.com") || host.endsWith(".googleusercontent.com");
+  return host.endsWith('.ggpht.com') || host.endsWith('.googleusercontent.com');
 }
 
 function buildGoogleImageCandidates(rawUrl: string): string[] {
@@ -55,7 +55,7 @@ function buildGoogleImageCandidates(rawUrl: string): string[] {
   const canonical = rewriteGoogleImageUrl(parsed);
   add(canonical);
 
-  const basePath = parsed.pathname.split("=")[0] ?? parsed.pathname;
+  const basePath = parsed.pathname.split('=')[0] ?? parsed.pathname;
   if (basePath) {
     const base = new URL(parsed.toString());
     base.pathname = `${basePath}=${YT_AVATAR_STYLE}`;
@@ -66,15 +66,12 @@ function buildGoogleImageCandidates(rawUrl: string): string[] {
     add(alt.toString());
   }
 
-  const hostVariants = [
-    "yt3.googleusercontent.com",
-    "lh3.googleusercontent.com",
-  ];
+  const hostVariants = ['yt3.googleusercontent.com', 'lh3.googleusercontent.com'];
   const currentHost = parsed.hostname.toLowerCase();
   if (
-    currentHost === "yt3.ggpht.com" ||
-    currentHost === "yt3.googleusercontent.com" ||
-    currentHost === "lh3.googleusercontent.com"
+    currentHost === 'yt3.ggpht.com' ||
+    currentHost === 'yt3.googleusercontent.com' ||
+    currentHost === 'lh3.googleusercontent.com'
   ) {
     const existing = [...candidates];
     for (const host of hostVariants) {
@@ -108,14 +105,14 @@ export function normalizeExternalImageUrl(input: string): string | null {
   const trimmed = input.trim();
   if (!trimmed) return null;
   if (trimmed.startsWith(IMAGE_PROXY_PREFIX)) return trimmed;
-  const normalized = trimmed.startsWith("//") ? `https:${trimmed}` : trimmed;
+  const normalized = trimmed.startsWith('//') ? `https:${trimmed}` : trimmed;
   let parsed: URL;
   try {
     parsed = new URL(normalized);
   } catch {
     return null;
   }
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
   if (isPrivateHost(parsed.hostname)) return null;
   return rewriteGoogleImageUrl(parsed);
 }
@@ -127,27 +124,26 @@ function toImageProxyUrl(input: string): string {
   return `${IMAGE_PROXY_PREFIX}${encodeURIComponent(input)}`;
 }
 
-type JsonLike =
-  null | boolean | number | string | JsonLike[] | { [k: string]: JsonLike };
+type JsonLike = null | boolean | number | string | JsonLike[] | { [k: string]: JsonLike };
 
 export function rewriteImageUrlsDeep<T>(value: T): T {
   const walk = (node: JsonLike): JsonLike => {
     if (Array.isArray(node)) {
       return node.map((item) => walk(item));
     }
-    if (!node || typeof node !== "object") {
+    if (!node || typeof node !== 'object') {
       return node;
     }
     const out: Record<string, JsonLike> = {};
     for (const [key, raw] of Object.entries(node)) {
-      if (typeof raw === "string" && key === "thumbnailUrl") {
+      if (typeof raw === 'string' && key === 'thumbnailUrl') {
         const normalized = normalizeExternalImageUrl(raw);
         out[key] = normalized ? toImageProxyUrl(normalized) : raw;
         continue;
       }
-      if (Array.isArray(raw) && key === "previewThumbs") {
+      if (Array.isArray(raw) && key === 'previewThumbs') {
         out[key] = raw.map((item) => {
-          if (typeof item !== "string") return item;
+          if (typeof item !== 'string') return item;
           const normalized = normalizeExternalImageUrl(item);
           return normalized ? toImageProxyUrl(normalized) : item;
         });
@@ -162,10 +158,7 @@ export function rewriteImageUrlsDeep<T>(value: T): T {
 }
 
 const imageFetchLimiter = new AsyncSemaphore(MAX_CONCURRENCY);
-const inflight = new Map<
-  string,
-  Promise<{ status: number; contentType: string; body: Buffer }>
->();
+const inflight = new Map<string, Promise<{ status: number; contentType: string; body: Buffer }>>();
 
 async function fetchImageWithRetry(
   url: string,
@@ -180,24 +173,21 @@ async function fetchImageWithRetry(
         const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
         const resp = await fetch(candidateUrl, {
           headers: {
-            Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9,ru;q=0.8",
-            "User-Agent": "Mozilla/5.0 (compatible; MusicAppImageProxy/1.0)",
-            Referer: "https://music.youtube.com/",
+            Accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9,ru;q=0.8',
+            'User-Agent': 'Mozilla/5.0 (compatible; MusicAppImageProxy/1.0)',
+            Referer: 'https://music.youtube.com/',
           },
           signal: controller.signal,
         }).finally(() => clearTimeout(timeout));
 
         if (resp.ok) {
           const arr = await resp.arrayBuffer();
-          const contentType = resp.headers.get("content-type") ?? "image/jpeg";
+          const contentType = resp.headers.get('content-type') ?? 'image/jpeg';
           return { status: 200, contentType, body: Buffer.from(arr) };
         }
 
-        if (
-          (resp.status === 429 || resp.status >= 500) &&
-          attempt < MAX_RETRIES
-        ) {
+        if ((resp.status === 429 || resp.status >= 500) && attempt < MAX_RETRIES) {
           attempt += 1;
           const delay = Math.min(400 * 2 ** attempt, 3000);
           await sleep(delay);
@@ -206,8 +196,8 @@ async function fetchImageWithRetry(
 
         return {
           status: resp.status,
-          contentType: "text/plain; charset=utf-8",
-          body: Buffer.from("Image fetch failed"),
+          contentType: 'text/plain; charset=utf-8',
+          body: Buffer.from('Image fetch failed'),
         };
       } catch {
         if (attempt < MAX_RETRIES) {
@@ -218,16 +208,16 @@ async function fetchImageWithRetry(
         }
         return {
           status: 502,
-          contentType: "text/plain; charset=utf-8",
-          body: Buffer.from("Image fetch failed"),
+          contentType: 'text/plain; charset=utf-8',
+          body: Buffer.from('Image fetch failed'),
         };
       }
     }
   }
   return {
     status: 502,
-    contentType: "text/plain; charset=utf-8",
-    body: Buffer.from("Image fetch failed"),
+    contentType: 'text/plain; charset=utf-8',
+    body: Buffer.from('Image fetch failed'),
   };
 }
 
@@ -244,14 +234,11 @@ export async function getProxiedImage(
           contentType: string;
           base64: string;
         };
-        if (
-          typeof parsed.contentType === "string" &&
-          typeof parsed.base64 === "string"
-        ) {
+        if (typeof parsed.contentType === 'string' && typeof parsed.base64 === 'string') {
           return {
             status: 200,
             contentType: parsed.contentType,
-            body: Buffer.from(parsed.base64, "base64"),
+            body: Buffer.from(parsed.base64, 'base64'),
           };
         }
       } catch {
@@ -273,9 +260,9 @@ export async function getProxiedImage(
       try {
         const payload = JSON.stringify({
           contentType: fetched.contentType,
-          base64: fetched.body.toString("base64"),
+          base64: fetched.body.toString('base64'),
         });
-        await redis.set(key, payload, "EX", IMAGE_CACHE_TTL_SEC);
+        await redis.set(key, payload, 'EX', IMAGE_CACHE_TTL_SEC);
       } catch {
         // Redis failures should not break image proxying.
       }

@@ -1,8 +1,8 @@
-import { envInt } from "../env";
-import type { Repository } from "typeorm";
-import { redisGetSWR } from "./cache-swr";
-import { ytdlpService } from "./ytdlp.service";
-import { ytmusicService } from "./ytmusic.service";
+import { envInt } from '../env';
+import type { Repository } from 'typeorm';
+import { redisGetSWR } from './cache-swr';
+import { ytdlpService } from './ytdlp.service';
+import { ytmusicService } from './ytmusic.service';
 
 /**
  * Canonical place for "how long is this track" and "what does it look like".
@@ -17,7 +17,7 @@ import { ytmusicService } from "./ytmusic.service";
 const MS_HEURISTIC_THRESHOLD = 86400;
 
 /** Metadata never changes for a given video id, so it caches for a long time. */
-const TRACK_META_TTL_SEC = envInt("REDIS_TTL_TRACK_META_SEC", 604800);
+const TRACK_META_TTL_SEC = envInt('REDIS_TTL_TRACK_META_SEC', 604800);
 
 export type TrackMedia = {
   thumbnailUrl: string | null;
@@ -46,13 +46,11 @@ export function youtubeThumbnailFallbackUrl(videoId: string): string {
  */
 export function normalizeDuration(duration: unknown): number | null {
   if (duration == null) return null;
-  if (typeof duration !== "number" && typeof duration !== "string") return null;
+  if (typeof duration !== 'number' && typeof duration !== 'string') return null;
 
-  if (typeof duration === "number") {
+  if (typeof duration === 'number') {
     if (!Number.isFinite(duration) || duration <= 0) return null;
-    return duration > MS_HEURISTIC_THRESHOLD
-      ? Math.round(duration / 1000)
-      : Math.round(duration);
+    return duration > MS_HEURISTIC_THRESHOLD ? Math.round(duration / 1000) : Math.round(duration);
   }
 
   const trimmed = duration.trim();
@@ -64,27 +62,21 @@ export function normalizeDuration(duration: unknown): number | null {
     return n > MS_HEURISTIC_THRESHOLD ? Math.round(n / 1000) : Math.round(n);
   }
 
-  const parts = trimmed.split(":").map((p) => Number(p.trim()));
+  const parts = trimmed.split(':').map((p) => Number(p.trim()));
   if (parts.some((p) => !Number.isFinite(p) || p < 0)) return null;
   if (parts.length === 2) return Math.round(parts[0]! * 60 + parts[1]!);
-  if (parts.length === 3)
-    return Math.round(parts[0]! * 3600 + parts[1]! * 60 + parts[2]!);
+  if (parts.length === 3) return Math.round(parts[0]! * 3600 + parts[1]! * 60 + parts[2]!);
   return null;
 }
 
 /** True when the length is unknown, which is not the same as "zero seconds". */
-function hasUnknownDuration(track: {
-  duration?: number | string | null;
-}): boolean {
+function hasUnknownDuration(track: { duration?: number | string | null }): boolean {
   return normalizeDuration(track.duration) == null;
 }
 
 /** True when no artwork has been supplied yet. */
 function hasUnknownThumbnail(track: { thumbnailUrl?: string | null }): boolean {
-  return (
-    typeof track.thumbnailUrl !== "string" ||
-    track.thumbnailUrl.trim().length === 0
-  );
+  return typeof track.thumbnailUrl !== 'string' || track.thumbnailUrl.trim().length === 0;
 }
 
 /** Fetches artwork and length for one track, uncached. */
@@ -94,7 +86,7 @@ async function fetchTrackMedia(trackId: string): Promise<TrackMedia> {
   try {
     const [song] = await ytmusicService.getSongsBatch([id]);
     if (song) {
-      const thumbnailUrl = (song.thumbnailUrl ?? "").trim();
+      const thumbnailUrl = (song.thumbnailUrl ?? '').trim();
       const duration = normalizeDuration(song.duration);
       if (thumbnailUrl || duration != null) {
         return { thumbnailUrl: thumbnailUrl || null, duration };
@@ -107,15 +99,13 @@ async function fetchTrackMedia(trackId: string): Promise<TrackMedia> {
   try {
     const meta = await ytdlpService.getMetadata(id);
     return {
-      thumbnailUrl: (meta.thumbnailUrl ?? "").trim() || null,
+      thumbnailUrl: (meta.thumbnailUrl ?? '').trim() || null,
       duration: normalizeDuration(meta.duration),
     };
   } catch {
     // Upstream is unavailable: fall back to the deterministic thumbnail URL.
     return {
-      thumbnailUrl: isYoutubeVideoId(id)
-        ? youtubeThumbnailFallbackUrl(id)
-        : null,
+      thumbnailUrl: isYoutubeVideoId(id) ? youtubeThumbnailFallbackUrl(id) : null,
       duration: null,
     };
   }
@@ -146,12 +136,10 @@ export function getTrackMedia(trackId: string): Promise<TrackMedia> {
  * gets one. Values the client already supplied win: it heard the track, and the
  * API agrees.
  */
-export async function completeTrackMedia(
-  track: PartialTrackMedia,
-): Promise<TrackMedia> {
-  const id = (track.trackId ?? "").trim();
+export async function completeTrackMedia(track: PartialTrackMedia): Promise<TrackMedia> {
+  const id = (track.trackId ?? '').trim();
   const duration = normalizeDuration(track.duration);
-  const thumbnailUrl = (track.thumbnailUrl ?? "").trim();
+  const thumbnailUrl = (track.thumbnailUrl ?? '').trim();
 
   if (duration != null && thumbnailUrl) {
     return { duration, thumbnailUrl };
@@ -178,14 +166,15 @@ export async function fillMissingTrackMedia<T extends PartialTrackMedia>(
   maxLookup = 10,
 ): Promise<T[]> {
   const needsLookup = (row: T): boolean => {
-    const id = (row.trackId ?? "").trim();
+    const id = (row.trackId ?? '').trim();
     if (!isYoutubeVideoId(id)) return false;
     return hasUnknownThumbnail(row) || hasUnknownDuration(row);
   };
 
-  const missingIds = [
-    ...new Set(rows.filter(needsLookup).map((row) => row.trackId!.trim())),
-  ].slice(0, maxLookup);
+  const missingIds = [...new Set(rows.filter(needsLookup).map((row) => row.trackId!.trim()))].slice(
+    0,
+    maxLookup,
+  );
   if (missingIds.length === 0) return rows;
 
   const byId = new Map<string, TrackMedia>();
@@ -200,7 +189,7 @@ export async function fillMissingTrackMedia<T extends PartialTrackMedia>(
   );
 
   return rows.map((row) => {
-    const id = (row.trackId ?? "").trim();
+    const id = (row.trackId ?? '').trim();
     const fetched = byId.get(id);
     if (!fetched) return row;
 
@@ -224,8 +213,8 @@ export async function updateDurationsWhereMissing(
     .createQueryBuilder()
     .update()
     .set({ duration })
-    .where("track_id = :trackId", { trackId })
-    .andWhere("(duration IS NULL OR duration <= 0)")
+    .where('track_id = :trackId', { trackId })
+    .andWhere('(duration IS NULL OR duration <= 0)')
     .execute();
   return result.affected ?? 0;
 }

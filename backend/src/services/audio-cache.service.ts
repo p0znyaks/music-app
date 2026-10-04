@@ -1,17 +1,17 @@
-import { createLogger } from "../logger";
-import { envInt } from "../env";
-import fs from "fs";
-import fsp from "fs/promises";
-import path from "path";
-import { Transform } from "stream";
+import { createLogger } from '../logger';
+import { envInt } from '../env';
+import fs from 'fs';
+import fsp from 'fs/promises';
+import path from 'path';
+import { Transform } from 'stream';
 
-const CACHE_DIR = process.env.AUDIO_CACHE_DIR?.trim() || "/app/audio_cache";
+const CACHE_DIR = process.env.AUDIO_CACHE_DIR?.trim() || '/app/audio_cache';
 
 /** Total size budget for the on-disk audio cache. */
-const MAX_BYTES = envInt("AUDIO_CACHE_MAX_BYTES", 1024 * 1024 * 1024);
+const MAX_BYTES = envInt('AUDIO_CACHE_MAX_BYTES', 1024 * 1024 * 1024);
 
 /** Files older than this are evicted first (access time based). */
-const MAX_AGE_MS = envInt("AUDIO_CACHE_MAX_AGE_MS", 7 * 24 * 60 * 60 * 1000);
+const MAX_AGE_MS = envInt('AUDIO_CACHE_MAX_AGE_MS', 7 * 24 * 60 * 60 * 1000);
 
 /** Truncated downloads below this are treated as failed and removed. */
 const MIN_VALID_BYTES = 64 * 1024;
@@ -57,18 +57,15 @@ async function sweep(): Promise<void> {
 
   // Temporary downloads from interrupted runs are pure garbage: drop them.
   const junk = dirents.filter(
-    (name) =>
-      name.endsWith(".part") || name.endsWith(".dl") || name.endsWith(".ytdl"),
+    (name) => name.endsWith('.part') || name.endsWith('.dl') || name.endsWith('.ytdl'),
   );
   await Promise.all(
-    junk.map((name) =>
-      fsp.unlink(path.join(CACHE_DIR, name)).catch(() => undefined),
-    ),
+    junk.map((name) => fsp.unlink(path.join(CACHE_DIR, name)).catch(() => undefined)),
   );
   try {
     const statted = await Promise.all(
       dirents
-        .filter((name) => name.endsWith(".m4a"))
+        .filter((name) => name.endsWith('.m4a'))
         .map(
           async (
             name,
@@ -130,7 +127,7 @@ async function sweep(): Promise<void> {
   }
 }
 
-const log = createLogger("audio-cache");
+const log = createLogger('audio-cache');
 
 export async function getCachedAudio(trackId: string): Promise<string | null> {
   if (!isValidTrackId(trackId)) {
@@ -204,7 +201,7 @@ export class AudioCacheWriter {
               void sweep();
             })
             .catch((err) => {
-              log.warn("promote failed", trackId, err);
+              log.warn('promote failed', trackId, err);
               discard();
             })
             .finally(resolve);
@@ -216,15 +213,15 @@ export class AudioCacheWriter {
         resolve();
         return;
       }
-      fileStream.on("error", (err) => {
+      fileStream.on('error', (err) => {
         this.failed = true;
-        log.warn("write failed", trackId, err);
+        log.warn('write failed', trackId, err);
         cleanup(false);
       });
-      fileStream.on("finish", () => cleanup(true));
+      fileStream.on('finish', () => cleanup(true));
       // destroy() (abort, client gone) emits 'close' without 'finish', and
       // that is exactly the case where the file must not be promoted.
-      fileStream.on("close", () => cleanup(false));
+      fileStream.on('close', () => cleanup(false));
     });
   }
 
@@ -260,7 +257,7 @@ export class AudioCacheWriter {
         cb(null, chunk);
       },
     });
-    sink.on("error", () => {
+    sink.on('error', () => {
       writer.failed = true;
     });
     const fileStream = writer.stream;
