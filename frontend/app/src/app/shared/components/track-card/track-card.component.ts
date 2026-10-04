@@ -3,39 +3,45 @@ import { CommonModule } from '@angular/common';
 import { Component, computed, inject, input, output, signal } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
 import { catchError, forkJoin, map, of, switchMap } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
 import { ArtistLookupService } from '../../../core/services/artist-lookup.service';
 import { FavoritesService } from '../../../core/services/favorites.service';
 import { TagsService, type TagSort } from '../../../core/services/tags.service';
 import { ToastService } from '../../../core/services/toast.service';
-import { PlayerService, type PlayerTrack, type QueueSource } from '../../../core/services/player.service';
+import {
+  PlayerService,
+  type PlayerTrack,
+  type QueueSource,
+} from '../../../core/services/player.service';
 import { AppTrack } from '../../models/track.model';
 import { formatDurationClock, normalizeDurationSeconds } from '../../utils/duration.util';
 import { ModalComponent } from '../modal/modal.component';
 import { TranslatePipe } from '../../pipes/t.pipe';
 import { AppSettingsService } from '../../../core/services/app-settings.service';
-
-interface PlaylistRow {
-  id: number;
-  name: string;
-  trackCount: number;
-  preview: { kind: 'mosaic'; urls: string[] } | { kind: 'single'; url: string | null };
-}
+import { IconComponent } from '../../../shared/components/icon/icon.component';
+import { ThumbComponent } from '../thumb/thumb.component';
+import { parseErrorPayload } from '../../../shared/utils/error-payload.util';
+import {
+  buildPlaylistPreview,
+  type PlaylistRow,
+} from '../../../shared/utils/playlist-preview.util';
 
 @Component({
   selector: 'app-track-card',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, TranslatePipe],
+  imports: [
+    CommonModule,
+    FormsModule,
+    ModalComponent,
+    TranslatePipe,
+    ThumbComponent,
+    IconComponent,
+  ],
   template: `
     <div class="card" (click)="onCardClick($event)">
       <div class="thumb-wrap">
-        @if (track().thumbnailUrl) {
-          <img [src]="track().thumbnailUrl!" [alt]="track().title" width="44" height="44" />
-        } @else {
-          <div class="thumb-ph" aria-hidden="true"></div>
-        }
+        <app-thumb [src]="track().thumbnailUrl" [alt]="track().title" [size]="44" />
       </div>
       <div class="info">
         <div class="title-row">
@@ -52,7 +58,7 @@ interface PlaylistRow {
           }
         </div>
         <div class="meta">
-          <button type="button" class="artist" (click)="openArtist(track().artist)">
+          <button type="button" class="artist" (click)="artistLookup.openArtist(track().artist)">
             {{ track().artist }}
           </button>
           @if (showDuration() && durationLabel(); as dur) {
@@ -71,12 +77,12 @@ interface PlaylistRow {
         >
           @if (isCurrentTrack() && isPlaying()) {
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-              <path d="M3.5 2.5c0-.55.45-1 1-1h2c.55 0 1 .45 1 1v11c0 .55-.45 1-1 1h-2c-.55 0-1-.45-1-1v-11zM8.5 2.5c0-.55.45-1 1-1h2c.55 0 1 .45 1 1v11c0 .55-.45 1-1 1h-2c-.55 0-1-.45-1-1v-11z"/>
+              <path
+                d="M3.5 2.5c0-.55.45-1 1-1h2c.55 0 1 .45 1 1v11c0 .55-.45 1-1 1h-2c-.55 0-1-.45-1-1v-11zM8.5 2.5c0-.55.45-1 1-1h2c.55 0 1 .45 1 1v11c0 .55-.45 1-1 1h-2c-.55 0-1-.45-1-1v-11z"
+              />
             </svg>
           } @else {
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-              <path d="M4 2l10 6-10 6V2z"/>
-            </svg>
+            <app-icon name="play" />
           }
         </button>
         <button
@@ -88,22 +94,50 @@ interface PlaylistRow {
           [attr.aria-label]="'favorite' | t"
         >
           @if (favored()) {
-            <svg width="20" height="20" viewBox="-1 0 20 16" fill="currentColor" aria-hidden="true">
-              <path d="M8 14l-1.09-.64C3.18 11.36 1 9.28 1 6.5 1 4.02 3.02 2 5.5 2c1.64 0 3.09.81 4 2.09C10.41 2.81 11.86 2 13.5 2 15.98 2 18 4.02 18 6.5c0 2.78-2.18 4.86-5.91 6.86L8 14z"/>
-            </svg>
+            <app-icon name="heart" />
           } @else {
-            <svg width="20" height="20" viewBox="-1 0 20 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <path d="M8 14l-1.09-.64C3.18 11.36 1 9.28 1 6.5 1 4.02 3.02 2 5.5 2c1.64 0 3.09.81 4 2.09C10.41 2.81 11.86 2 13.5 2 15.98 2 18 4.02 18 6.5c0 2.78-2.18 4.86-5.91 6.86L8 14z"/>
-            </svg>
+            <app-icon name="heart" [filled]="false" />
           }
         </button>
         @if (canTag()) {
-          <button type="button" class="act tap" (click)="toggleTag()" [title]="'tag' | t" [attr.aria-label]="'tag' | t">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 2h6.59a1 1 0 0 1 .7.29l5.42 5.42a1 1 0 0 1 0 1.41l-5.42 5.42a1 1 0 0 1-1.41 0L2 9.71A1 1 0 0 1 2 8.29V2z"/></svg>
+          <button
+            type="button"
+            class="act tap"
+            (click)="toggleTag()"
+            [title]="'tag' | t"
+            [attr.aria-label]="'tag' | t"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                d="M2 2h6.59a1 1 0 0 1 .7.29l5.42 5.42a1 1 0 0 1 0 1.41l-5.42 5.42a1 1 0 0 1-1.41 0L2 9.71A1 1 0 0 1 2 8.29V2z"
+              />
+            </svg>
           </button>
         }
-        <button type="button" class="act tap" (click)="openPlaylistModal()" [title]="'addToPlaylist' | t" [attr.aria-label]="'addToPlaylist' | t">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v10M3 8h10"/></svg>
+        <button
+          type="button"
+          class="act tap"
+          (click)="openPlaylistModal()"
+          [title]="'addToPlaylist' | t"
+          [attr.aria-label]="'addToPlaylist' | t"
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M8 3v10M3 8h10" />
+          </svg>
         </button>
       </div>
     </div>
@@ -119,7 +153,12 @@ interface PlaylistRow {
         @if (trackTags().length > 0) {
           <div class="cur-tags">
             @for (t of trackTags(); track t) {
-              <button type="button" class="cur-tag" (click)="removeTag(t)" [title]="'removeTag' | t">
+              <button
+                type="button"
+                class="cur-tag"
+                (click)="removeTag(t)"
+                [title]="'removeTag' | t"
+              >
                 #{{ t }} <span aria-hidden="true">×</span>
               </button>
             }
@@ -140,14 +179,35 @@ interface PlaylistRow {
         </div>
 
         <div class="tag-sort">
-          <button type="button" class="sort-btn" [class.active]="tagSort() === 'createdAt'" (click)="tagSort.set('createdAt')">{{ 'sortByDate' | t }}</button>
-          <button type="button" class="sort-btn" [class.active]="tagSort() === 'alpha'" (click)="tagSort.set('alpha')">{{ 'sortAZ' | t }}</button>
+          <button
+            type="button"
+            class="sort-btn"
+            [class.active]="tagSort() === 'createdAt'"
+            (click)="tagSort.set('createdAt')"
+          >
+            {{ 'sortByDate' | t }}
+          </button>
+          <button
+            type="button"
+            class="sort-btn"
+            [class.active]="tagSort() === 'alpha'"
+            (click)="tagSort.set('alpha')"
+          >
+            {{ 'sortAZ' | t }}
+          </button>
         </div>
 
         @if (distinctTags().length > 0) {
           <div class="tag-suggest">
             @for (t of distinctTags(); track t) {
-              <button type="button" class="sug" (click)="submitTag(t)" [disabled]="trackTags().some(x => x.trim().toLowerCase() === t.trim().toLowerCase())">
+              <button
+                type="button"
+                class="sug"
+                (click)="submitTag(t)"
+                [disabled]="
+                  trackTags().some((x) => x.trim().toLowerCase() === t.trim().toLowerCase())
+                "
+              >
                 #{{ t }}
               </button>
             }
@@ -156,15 +216,27 @@ interface PlaylistRow {
       </div>
     }
 
-    <app-modal [title]="'trackHasTags' | t" [isOpen]="confirmFavOpen()" (closed)="confirmFavOpen.set(false)">
+    <app-modal
+      [title]="'trackHasTags' | t"
+      [isOpen]="confirmFavOpen()"
+      (closed)="confirmFavOpen.set(false)"
+    >
       <p>{{ 'removeTrackWithTagsConfirm' | t }}</p>
       <div class="confirm-row">
-        <button type="button" class="tag-btn ghost" (click)="confirmFavOpen.set(false)">{{ 'no' | t }}</button>
-        <button type="button" class="tag-btn" (click)="confirmRemoveFavorite()">{{ 'yes' | t }}</button>
+        <button type="button" class="tag-btn ghost" (click)="confirmFavOpen.set(false)">
+          {{ 'no' | t }}
+        </button>
+        <button type="button" class="tag-btn" (click)="confirmRemoveFavorite()">
+          {{ 'yes' | t }}
+        </button>
       </div>
     </app-modal>
 
-    <app-modal [title]="'addToPlaylist' | t" [isOpen]="playlistOpen()" (closed)="playlistOpen.set(false)">
+    <app-modal
+      [title]="'addToPlaylist' | t"
+      [isOpen]="playlistOpen()"
+      (closed)="playlistOpen.set(false)"
+    >
       @if (loadingLists()) {
         <p>{{ 'loading' | t }}</p>
       } @else {
@@ -253,7 +325,6 @@ interface PlaylistRow {
     .thumb-ph {
       width: 44px;
       height: 44px;
-      background: var(--border);
     }
     .info {
       flex: 1;
@@ -383,7 +454,9 @@ interface PlaylistRow {
       align-items: center;
       justify-content: center;
       color: var(--accent-dim);
-      transition: color 0.2s ease, background 0.2s ease;
+      transition:
+        color 0.2s ease,
+        background 0.2s ease;
     }
     .act svg {
       width: 18px;
@@ -595,7 +668,10 @@ interface PlaylistRow {
       background: var(--bg-card);
       color: inherit;
       cursor: pointer;
-      transition: background 0.2s ease, border-color 0.2s ease, transform 0.12s ease;
+      transition:
+        background 0.2s ease,
+        border-color 0.2s ease,
+        transform 0.12s ease;
     }
     .pl-row:hover {
       background: var(--bg-hover);
@@ -665,8 +741,7 @@ interface PlaylistRow {
 })
 export class TrackCardComponent {
   private readonly api = inject(ApiService);
-  private readonly artistLookup = inject(ArtistLookupService);
-  private readonly router = inject(Router);
+  readonly artistLookup = inject(ArtistLookupService);
   private readonly playerService = inject(PlayerService);
   private readonly toast = inject(ToastService);
   private readonly settings = inject(AppSettingsService);
@@ -785,7 +860,7 @@ export class TrackCardComponent {
         },
         error: (err) => {
           if (err instanceof HttpErrorResponse && err.status === 409) {
-            const payload = this.parseErrorPayload(err);
+            const payload = parseErrorPayload(err);
             if (payload?.requiresConfirm) {
               this.confirmFavOpen.set(true);
               return;
@@ -833,7 +908,7 @@ export class TrackCardComponent {
       this.toast.show(this.settings.t('removeHashHint'));
       return;
     }
-    
+
     if (tag.length > 15) {
       this.toast.show(this.settings.t('max15Chars'));
       return;
@@ -863,7 +938,7 @@ export class TrackCardComponent {
       },
       error: (err) => {
         if (err instanceof HttpErrorResponse) {
-          const payload = this.parseErrorPayload(err);
+          const payload = parseErrorPayload(err);
           const msg = typeof payload?.message === 'string' ? payload.message : null;
           if (err.status === 403) {
             this.toast.show(msg ?? this.settings.t('tagOnlyInPlaylistOrFavorites'));
@@ -893,21 +968,6 @@ export class TrackCardComponent {
     });
   }
 
-  private parseErrorPayload(err: HttpErrorResponse): any {
-    const e = err.error;
-    if (e && typeof e === 'object') {
-      return e;
-    }
-    if (typeof e === 'string') {
-      try {
-        return JSON.parse(e);
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  }
-
   confirmRemoveFavorite(): void {
     const id = this.normalizedTrackId();
     if (!id) return;
@@ -921,29 +981,6 @@ export class TrackCardComponent {
         this.confirmFavOpen.set(false);
       },
     });
-  }
-
-  private buildPreview(tracks: { thumbnailUrl: string | null }[]): PlaylistRow['preview'] {
-    if (tracks.length === 0) {
-      return { kind: 'single', url: null };
-    }
-
-    const first4 = tracks.slice(0, 4);
-    if (first4.length < 4) {
-      return { kind: 'single', url: first4[0]?.thumbnailUrl ?? null };
-    }
-
-    const urls = first4.map((t) => t.thumbnailUrl).filter((u): u is string => !!u);
-    if (urls.length < 4) {
-      return { kind: 'single', url: first4[0]?.thumbnailUrl ?? null };
-    }
-
-    const uniq = new Set(urls);
-    if (uniq.size < 4) {
-      return { kind: 'single', url: first4[0]?.thumbnailUrl ?? null };
-    }
-
-    return { kind: 'mosaic', urls };
   }
 
   private loadPlaylistsForModal(): void {
@@ -963,7 +1000,7 @@ export class TrackCardComponent {
                 id: p.id,
                 name: p.name,
                 trackCount: tracks.length,
-                preview: this.buildPreview(tracks),
+                preview: buildPlaylistPreview(tracks),
               })),
               catchError(() =>
                 of({
@@ -1050,18 +1087,5 @@ export class TrackCardComponent {
           finallyCb?.();
         },
       });
-  }
-
-  openArtist(artistName: string): void {
-    const name = artistName.trim();
-    if (!name) {
-      return;
-    }
-    this.artistLookup.resolveBrowseIdByName(name).subscribe((browseId) => {
-      if (!browseId) {
-        return;
-      }
-      void this.router.navigate(['/artists', browseId]);
-    });
   }
 }

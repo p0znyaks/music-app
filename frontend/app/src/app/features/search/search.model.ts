@@ -1,19 +1,14 @@
 import type { AppTrack } from '../../shared/models/track.model';
 
-/** Ответ GET /api/search — блок albums/artists с yt-dlp (для смешанного поиска не используем в UI). */
+/**
+ * Ответ GET /api/search — треки. Альбомы и исполнители приходят отдельными
+ * эндпоинтами (search/albums, search/artists), поэтому в UI не используются.
+ */
 export interface SearchBundle {
   tracks: AppTrack[];
   albums: unknown[];
   artists: unknown[];
 }
-
-/** NDJSON-кадры GET /api/search (application/x-ndjson). */
-export type SearchStreamChunk =
-  | { kind: 'meta'; query: string }
-  | { kind: 'tracks'; partial: boolean; items: AppTrack[] }
-  | { kind: 'albums'; items: unknown[] }
-  | { kind: 'artists'; items: unknown[] }
-  | { kind: 'done' };
 
 /** Карточка альбома: GET /api/search/albums */
 export interface YtmAlbumCard {

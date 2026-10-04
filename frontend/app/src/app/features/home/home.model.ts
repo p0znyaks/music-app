@@ -38,10 +38,10 @@ export interface HomeRecoResponse {
   recommendedTracks: AppTrack[];
   albumsForYou: HomeRecoAlbumCard[];
   mixesForYou: HomeRecoMixCard[];
-  similarTo: Array<{
+  similarTo: {
     seedArtist: string;
     items: HomeRecoArtistCard[];
-  }>;
+  }[];
   byGenre: HomeRecoGenreBlock[];
 }
 

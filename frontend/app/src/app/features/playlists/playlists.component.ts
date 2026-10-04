@@ -7,13 +7,7 @@ import { ApiService } from '../../core/services/api.service';
 import { ToastService } from '../../core/services/toast.service';
 import { TranslatePipe } from '../../shared/pipes/t.pipe';
 import { AppSettingsService } from '../../core/services/app-settings.service';
-
-interface PlaylistRow {
-  id: number;
-  name: string;
-  trackCount: number;
-  preview: { kind: 'mosaic'; urls: string[] } | { kind: 'single'; url: string | null };
-}
+import { buildPlaylistPreview, type PlaylistRow } from '../../shared/utils/playlist-preview.util';
 
 @Component({
   selector: 'app-playlists',
@@ -24,12 +18,24 @@ interface PlaylistRow {
       <div class="head">
         <h1>{{ 'playlists' | t }}</h1>
         @if (!creating()) {
-          <button type="button" class="new tap" (click)="creating.set(true)">+ {{ 'playlistsNew' | t }}</button>
+          <button type="button" class="new tap" (click)="creating.set(true)">
+            + {{ 'playlistsNew' | t }}
+          </button>
         } @else {
           <div class="inline-form">
-            <input type="text" [(ngModel)]="newName" [placeholder]="'playlistsNamePlaceholder' | t" class="inp" (keydown.enter)="create()" />
-            <button type="button" class="btn primary tap" (click)="create()">{{ 'create' | t }}</button>
-            <button type="button" class="btn ghost tap" (click)="cancelCreate()">{{ 'cancel' | t }}</button>
+            <input
+              type="text"
+              [(ngModel)]="newName"
+              [placeholder]="'playlistsNamePlaceholder' | t"
+              class="inp"
+              (keydown.enter)="create()"
+            />
+            <button type="button" class="btn primary tap" (click)="create()">
+              {{ 'create' | t }}
+            </button>
+            <button type="button" class="btn ghost tap" (click)="cancelCreate()">
+              {{ 'cancel' | t }}
+            </button>
           </div>
         }
       </div>
@@ -119,9 +125,9 @@ interface PlaylistRow {
       color: var(--accent-dim);
     }
     .btn.danger {
-      background: #ef4444;
-      border-color: #ef4444;
-      color: #0b0b0c;
+      background: var(--danger);
+      border-color: var(--danger);
+      color: var(--on-danger);
       font-weight: 700;
     }
     .btn:disabled {
@@ -221,29 +227,6 @@ export class PlaylistsComponent {
     this.load();
   }
 
-  private buildPreview(tracks: { thumbnailUrl: string | null }[]): PlaylistRow['preview'] {
-    if (tracks.length === 0) {
-      return { kind: 'single', url: null };
-    }
-
-    const first4 = tracks.slice(0, 4);
-    if (first4.length < 4) {
-      return { kind: 'single', url: first4[0]?.thumbnailUrl ?? null };
-    }
-
-    const urls = first4.map((t) => t.thumbnailUrl).filter((u): u is string => !!u);
-    if (urls.length < 4) {
-      return { kind: 'single', url: first4[0]?.thumbnailUrl ?? null };
-    }
-
-    const uniq = new Set(urls);
-    if (uniq.size < 4) {
-      return { kind: 'single', url: first4[0]?.thumbnailUrl ?? null };
-    }
-
-    return { kind: 'mosaic', urls };
-  }
-
   load(): void {
     this.api.get<{ id: number; name: string; createdAt: string }[]>('playlists').subscribe({
       next: (list) => {
@@ -253,23 +236,21 @@ export class PlaylistsComponent {
         }
         forkJoin(
           list.map((p) =>
-            this.api
-              .get<{ thumbnailUrl: string | null }[]>(`playlists/${p.id}/tracks`)
-              .pipe(
-                map((tracks) => ({
+            this.api.get<{ thumbnailUrl: string | null }[]>(`playlists/${p.id}/tracks`).pipe(
+              map((tracks) => ({
+                id: p.id,
+                name: p.name,
+                trackCount: tracks.length,
+                preview: buildPlaylistPreview(tracks),
+              })),
+              catchError(() =>
+                of({
                   id: p.id,
                   name: p.name,
-                  trackCount: tracks.length,
-                  preview: this.buildPreview(tracks),
-                })),
-                catchError(() =>
-                  of({
-                    id: p.id,
-                    name: p.name,
-                    trackCount: 0,
-                    preview: { kind: 'single' as const, url: null },
-                  }),
-                ),
+                  trackCount: 0,
+                  preview: { kind: 'single' as const, url: null },
+                }),
+              ),
             ),
           ),
         ).subscribe({
@@ -311,5 +292,4 @@ export class PlaylistsComponent {
   open(p: PlaylistRow): void {
     void this.router.navigate(['/playlists', p.id], { state: { name: p.name } });
   }
-
 }

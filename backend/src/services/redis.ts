@@ -1,4 +1,4 @@
-import Redis from 'ioredis';
+import Redis from "ioredis";
 
 let redisClient: Redis | null = null;
 
@@ -8,7 +8,7 @@ export function connectRedis(): Redis {
   }
   const url = process.env.REDIS_URL;
   if (!url) {
-    throw new Error('REDIS_URL environment variable is required');
+    throw new Error("REDIS_URL environment variable is required");
   }
   redisClient = new Redis(url);
   return redisClient;
@@ -17,7 +17,9 @@ export function connectRedis(): Redis {
 /** Экземпляр, созданный в main через connectRedis() — для сервисов (ytdlp и др.). */
 export function getRedis(): Redis {
   if (!redisClient) {
-    throw new Error('Redis is not connected. Call connectRedis() during application startup.');
+    throw new Error(
+      "Redis is not connected. Call connectRedis() during application startup.",
+    );
   }
   return redisClient;
 }

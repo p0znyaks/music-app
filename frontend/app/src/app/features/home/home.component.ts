@@ -4,6 +4,9 @@ import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { ApiService } from '../../core/services/api.service';
 import { PlayerService, type PlayerTrack } from '../../core/services/player.service';
+import { SkeletonComponent } from '../../shared/components/skeleton/skeleton.component';
+import { IconComponent } from '../../shared/components/icon/icon.component';
+import { ThumbComponent } from '../../shared/components/thumb/thumb.component';
 import type { AppTrack } from '../../shared/models/track.model';
 import type { HomeRecoResponse } from './home.model';
 import { TranslatePipe } from '../../shared/pipes/t.pipe';
@@ -13,14 +16,19 @@ import { formatDurationClock, normalizeDurationSeconds } from '../../shared/util
 @Component({
   selector: 'app-home',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, TranslatePipe],
+  imports: [
+    CommonModule,
+    FormsModule,
+    RouterLink,
+    TranslatePipe,
+    ThumbComponent,
+    IconComponent,
+    SkeletonComponent,
+  ],
   template: `
     <div class="page">
       <div class="search-box">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <circle cx="11" cy="11" r="7"></circle>
-          <path d="M21 21l-4.35-4.35" stroke-linecap="round"></path>
-        </svg>
+        <app-icon name="search" />
         <input
           type="text"
           [(ngModel)]="query"
@@ -30,25 +38,32 @@ import { formatDurationClock, normalizeDurationSeconds } from '../../shared/util
       </div>
 
       @if (loading()) {
-        <div class="skel skel-header"></div>
-        <div class="skel skel-row"></div>
-        <div class="skel skel-row"></div>
+        <app-skeleton variant="block" [height]="28" />
+        <app-skeleton [count]="2" />
       } @else if (error()) {
-        <div class="error">{{ error() }}</div>
+        <div class="error-text">{{ error() }}</div>
       } @else if (data(); as d) {
         <section class="section">
           <div class="section-head">
             <h2>{{ 'homeRecommended' | t }}</h2>
             <div class="nav-btns">
-              <button type="button" class="nav-btn" (click)="prev('recommended')" [disabled]="!canPrev('recommended')" aria-label="Назад">
-                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path d="M14.5 6.5L9 12l5.5 5.5" />
-                </svg>
+              <button
+                type="button"
+                class="nav-btn"
+                (click)="prev('recommended')"
+                [disabled]="!canPrev('recommended')"
+                aria-label="Назад"
+              >
+                <app-icon class="nav-icon" name="chevron-left" />
               </button>
-              <button type="button" class="nav-btn" (click)="next('recommended', d.recommendedTracks.length)" [disabled]="!canNext('recommended', d.recommendedTracks.length)" aria-label="Вперёд">
-                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path d="M9.5 6.5L15 12l-5.5 5.5" />
-                </svg>
+              <button
+                type="button"
+                class="nav-btn"
+                (click)="next('recommended', d.recommendedTracks.length)"
+                [disabled]="!canNext('recommended', d.recommendedTracks.length)"
+                aria-label="Вперёд"
+              >
+                <app-icon class="nav-icon" name="chevron-right" />
               </button>
             </div>
           </div>
@@ -58,13 +73,13 @@ import { formatDurationClock, normalizeDurationSeconds } from '../../shared/util
             [class.slide-prev]="animDirection('recommended') === 'prev'"
           >
             @for (track of pageSlice(d.recommendedTracks, 'recommended'); track track.trackId) {
-              <button type="button" class="track-row" (click)="playTrack(track, d.recommendedTracks)">
+              <button
+                type="button"
+                class="track-row"
+                (click)="playTrack(track, d.recommendedTracks)"
+              >
                 <div class="thumb-wrap">
-                  @if (track.thumbnailUrl) {
-                    <img [src]="track.thumbnailUrl" [alt]="track.title" width="48" height="48" />
-                  } @else {
-                    <div class="thumb-ph"></div>
-                  }
+                  <app-thumb [src]="track.thumbnailUrl" [alt]="track.title" [size]="48" />
                 </div>
                 <span class="track-info">
                   <span class="title">{{ track.title }}</span>
@@ -87,7 +102,13 @@ import { formatDurationClock, normalizeDurationSeconds } from '../../shared/util
           <div class="tile-grid static-eight">
             @for (album of d.albumsForYou.slice(0, 8); track album.browseId) {
               <a class="tile" [routerLink]="['/albums', album.browseId]">
-                <img class="tile-cover" [src]="album.thumbnailUrl" [alt]="album.title" width="168" height="168" />
+                <img
+                  class="tile-cover"
+                  [src]="album.thumbnailUrl"
+                  [alt]="album.title"
+                  width="168"
+                  height="168"
+                />
                 <div class="tile-title">{{ album.title }}</div>
                 <div class="tile-sub">{{ album.artist }}</div>
               </a>
@@ -103,7 +124,13 @@ import { formatDurationClock, normalizeDurationSeconds } from '../../shared/util
             <div class="tile-grid static-eight">
               @for (artist of block.items.slice(0, 8); track artist.browseId) {
                 <a class="tile" [routerLink]="['/artists', artist.browseId]">
-                  <img class="tile-cover round" [src]="artist.thumbnailUrl" [alt]="artist.name" width="168" height="168" />
+                  <img
+                    class="tile-cover round"
+                    [src]="artist.thumbnailUrl"
+                    [alt]="artist.name"
+                    width="168"
+                    height="168"
+                  />
                   <div class="tile-title">{{ artist.name }}</div>
                 </a>
               }
@@ -116,10 +143,14 @@ import { formatDurationClock, normalizeDurationSeconds } from '../../shared/util
             <div class="section-head">
               <h2>{{ block.genre | titlecase }}</h2>
               <div class="nav-btns">
-                <button type="button" class="nav-btn" (click)="prev('genre-' + block.genre)" [disabled]="!canPrev('genre-' + block.genre)" aria-label="Назад">
-                  <svg class="nav-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path d="M14.5 6.5L9 12l5.5 5.5" />
-                  </svg>
+                <button
+                  type="button"
+                  class="nav-btn"
+                  (click)="prev('genre-' + block.genre)"
+                  [disabled]="!canPrev('genre-' + block.genre)"
+                  aria-label="Назад"
+                >
+                  <app-icon class="nav-icon" name="chevron-left" />
                 </button>
                 <button
                   type="button"
@@ -128,9 +159,7 @@ import { formatDurationClock, normalizeDurationSeconds } from '../../shared/util
                   [disabled]="!canNext('genre-' + block.genre, block.tracks.length)"
                   aria-label="Вперёд"
                 >
-                  <svg class="nav-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path d="M9.5 6.5L15 12l-5.5 5.5" />
-                  </svg>
+                  <app-icon class="nav-icon" name="chevron-right" />
                 </button>
               </div>
             </div>
@@ -142,11 +171,7 @@ import { formatDurationClock, normalizeDurationSeconds } from '../../shared/util
               @for (track of pageSlice(block.tracks, 'genre-' + block.genre); track track.trackId) {
                 <button type="button" class="track-row" (click)="playTrack(track, block.tracks)">
                   <div class="thumb-wrap">
-                    @if (track.thumbnailUrl) {
-                      <img [src]="track.thumbnailUrl" [alt]="track.title" width="48" height="48" />
-                    } @else {
-                      <div class="thumb-ph"></div>
-                    }
+                    <app-thumb [src]="track.thumbnailUrl" [alt]="track.title" [size]="48" />
                   </div>
                   <span class="track-info">
                     <span class="title">{{ track.title }}</span>
@@ -225,7 +250,12 @@ import { formatDurationClock, normalizeDurationSeconds } from '../../shared/util
       cursor: pointer;
       display: grid;
       place-items: center;
-      transition: transform 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, color 0.2s ease;
+      transition:
+        transform 0.2s ease,
+        background-color 0.2s ease,
+        border-color 0.2s ease,
+        box-shadow 0.2s ease,
+        color 0.2s ease;
     }
     .nav-icon {
       width: 18px;
@@ -285,16 +315,12 @@ import { formatDurationClock, normalizeDurationSeconds } from '../../shared/util
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    .tile-sub,
-    .mix-artists {
+    .tile-sub {
       color: var(--accent-dim);
       font-size: 0.82rem;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-    }
-    .mix-tile .mix-artists {
-      margin-top: 2px;
     }
     .mix-collage {
       display: grid;
@@ -312,7 +338,9 @@ import { formatDurationClock, normalizeDurationSeconds } from '../../shared/util
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 10px 14px;
-      transition: transform 0.25s ease, opacity 0.25s ease;
+      transition:
+        transform 0.25s ease,
+        opacity 0.25s ease;
       will-change: transform, opacity;
     }
     .track-grid.slide-next {
@@ -343,9 +371,6 @@ import { formatDurationClock, normalizeDurationSeconds } from '../../shared/util
       width: 48px;
       height: 48px;
       border-radius: 8px;
-      object-fit: cover;
-      background: var(--border);
-      flex-shrink: 0;
     }
     .track-info {
       min-width: 0;
@@ -378,25 +403,6 @@ import { formatDurationClock, normalizeDurationSeconds } from '../../shared/util
       color: var(--accent-dim);
       font-variant-numeric: tabular-nums;
       flex-shrink: 0;
-    }
-    .error {
-      color: #c44;
-    }
-    .skel {
-      border-radius: 10px;
-      background: var(--bg-hover);
-      animation: pulse 1.2s ease-in-out infinite;
-    }
-    .skel-header {
-      height: 46px;
-      max-width: 560px;
-    }
-    .skel-row {
-      height: 180px;
-    }
-    @keyframes pulse {
-      0%, 100% { opacity: 0.5; }
-      50% { opacity: 0.95; }
     }
     @keyframes slide-next {
       0% {

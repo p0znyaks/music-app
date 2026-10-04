@@ -4,6 +4,8 @@ import { RouterLink } from '@angular/router';
 import { TranslatePipe } from '../../shared/pipes/t.pipe';
 import { ApiService } from '../../core/services/api.service';
 import type { HomeRecoResponse } from '../home/home.model';
+import { EmptyStateComponent } from '../../shared/components/empty-state/empty-state.component';
+import { SkeletonComponent } from '../../shared/components/skeleton/skeleton.component';
 
 interface MixCard {
   id: string;
@@ -16,7 +18,7 @@ interface MixCard {
 @Component({
   selector: 'app-personal-mix',
   standalone: true,
-  imports: [CommonModule, RouterLink, TranslatePipe],
+  imports: [CommonModule, RouterLink, TranslatePipe, EmptyStateComponent, SkeletonComponent],
   template: `
     <div class="page">
       <h1>{{ 'personalMix' | t }}</h1>
@@ -43,12 +45,11 @@ interface MixCard {
           }
         </div>
       } @else {
-        <div class="empty">
-          <p>{{ 'personalMixEmpty' | t }}</p>
-          <button type="button" class="gen-btn" [disabled]="generating()" (click)="generate()">
-            {{ 'personalMixGenerate' | t }}
-          </button>
-        </div>
+        <app-empty-state
+          titleKey="personalMixEmpty"
+          [actionKey]="generating() ? null : 'personalMixGenerate'"
+          (action)="generate()"
+        />
       }
     </div>
   `,
@@ -63,41 +64,6 @@ interface MixCard {
       font-size: 2rem;
       margin: 0;
     }
-    .empty {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 1.5rem;
-      padding: 2rem 0;
-    }
-    .empty p {
-      color: var(--accent-dim);
-      font-size: 1.05rem;
-      margin: 0;
-    }
-    .gen-btn {
-      padding: 0.75rem 2rem;
-      border: 1px solid var(--border);
-      border-radius: 999px;
-      background: var(--bg-card);
-      color: var(--accent);
-      font-size: 1rem;
-      cursor: pointer;
-      transition: transform 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
-    }
-    .gen-btn:hover:not(:disabled) {
-      transform: translateY(-1px) scale(1.03);
-      background: var(--bg-hover);
-      border-color: var(--accent-dim);
-      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    }
-    .gen-btn:active:not(:disabled) {
-      transform: scale(0.97);
-    }
-    .gen-btn:disabled {
-      opacity: 0.5;
-      cursor: default;
-    }
     .mix-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -111,7 +77,7 @@ interface MixCard {
       color: inherit;
     }
     .mix-card:hover .tile-cover {
-      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
       transform: translateY(-2px);
     }
     .tile-cover {
@@ -121,7 +87,9 @@ interface MixCard {
       object-fit: cover;
       border: 1px solid var(--border);
       background: var(--bg-card);
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease;
     }
     .tile-cover.ph {
       background: linear-gradient(145deg, var(--border), var(--bg-hover));
@@ -178,29 +146,37 @@ export class PersonalMixComponent {
           this.mixes.set(stored);
         }
       }
-    } catch {}
+    } catch {
+      // localStorage is unavailable in private mode or when the quota is
+      // exhausted; the page still works, it just will not remember the mix.
+    }
   }
 
   generate(): void {
     this.generating.set(true);
-    this.api.post<{ mixes: HomeRecoResponse['mixesForYou'] }>('reco/mixes/regenerate', {}).subscribe({
-      next: (payload) => {
-        const cards = payload.mixes.map((m) => ({
-          id: m.id,
-          title: m.title,
-          subtitle: m.subtitle,
-          thumbnailUrl: m.thumbnailUrl,
-          previewThumbs: m.previewThumbs ?? [],
-        }));
-        this.mixes.set(cards);
-        try {
-          localStorage.setItem(this.STORAGE_KEY, JSON.stringify(cards));
-        } catch {}
-        this.generating.set(false);
-      },
-      error: () => {
-        this.generating.set(false);
-      },
-    });
+    this.api
+      .post<{ mixes: HomeRecoResponse['mixesForYou'] }>('reco/mixes/regenerate', {})
+      .subscribe({
+        next: (payload) => {
+          const cards = payload.mixes.map((m) => ({
+            id: m.id,
+            title: m.title,
+            subtitle: m.subtitle,
+            thumbnailUrl: m.thumbnailUrl,
+            previewThumbs: m.previewThumbs ?? [],
+          }));
+          this.mixes.set(cards);
+          try {
+            localStorage.setItem(this.STORAGE_KEY, JSON.stringify(cards));
+          } catch {
+            // Same reasoning as in load(): failing to cache the freshly generated
+            // mixes is not worth surfacing to the user.
+          }
+          this.generating.set(false);
+        },
+        error: () => {
+          this.generating.set(false);
+        },
+      });
   }
 }

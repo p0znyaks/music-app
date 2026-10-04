@@ -9,66 +9,113 @@ import { TrackCardComponent } from '../../shared/components/track-card/track-car
 import { TranslatePipe } from '../../shared/pipes/t.pipe';
 import { AppSettingsService } from '../../core/services/app-settings.service';
 import { ToastService } from '../../core/services/toast.service';
+import { EmptyStateComponent } from '../../shared/components/empty-state/empty-state.component';
+import { SkeletonComponent } from '../../shared/components/skeleton/skeleton.component';
+import { IconComponent } from '../../shared/components/icon/icon.component';
 
 interface TagsPlaylist {
   playlistName: string;
   tracks: AppTrack[];
 }
 
+/** Mirrors the server limit on tags per playlist query. */
+const MAX_SELECTED_TAGS = 4;
+
 @Component({
   selector: 'app-mood',
   standalone: true,
-  imports: [CommonModule, TrackCardComponent, TranslatePipe],
+  imports: [
+    CommonModule,
+    TrackCardComponent,
+    TranslatePipe,
+    IconComponent,
+    EmptyStateComponent,
+    SkeletonComponent,
+  ],
   template: `
     <div class="page">
       <div class="head">
         <h1 class="title">{{ 'tagsTitle' | t }}</h1>
         <div class="sort">
-          <button type="button" class="sort-btn" [class.active]="sort() === 'createdAt'" (click)="setSort('createdAt')">{{ 'sortByDate' | t }}</button>
-          <button type="button" class="sort-btn" [class.active]="sort() === 'alpha'" (click)="setSort('alpha')">{{ 'sortAZ' | t }}</button>
+          <button
+            type="button"
+            class="sort-btn"
+            [class.active]="sort() === 'createdAt'"
+            (click)="setSort('createdAt')"
+          >
+            {{ 'sortByDate' | t }}
+          </button>
+          <button
+            type="button"
+            class="sort-btn"
+            [class.active]="sort() === 'alpha'"
+            (click)="setSort('alpha')"
+          >
+            {{ 'sortAZ' | t }}
+          </button>
         </div>
       </div>
 
       <div class="chips-wrap">
         @for (tag of tags(); track tag) {
-          <button type="button" class="chip" [class.active]="isSelected(tag)" (click)="toggle(tag)">
+          <button
+            type="button"
+            class="chip"
+            [class.active]="isSelected(tag)"
+            [disabled]="!isSelected(tag) && atTagLimit()"
+            (click)="toggle(tag)"
+          >
             #{{ tag }}
           </button>
         }
       </div>
 
+      @if (atTagLimit()) {
+        <p class="hint">{{ tagLimitHint() }}</p>
+      }
+
       @if (tags().length === 0 && !loadingTags()) {
-        <div class="empty">
-          <span class="empty-icon" aria-hidden="true">🏷️</span>
-          <p class="empty-title">{{ 'noTagsYet' | t }}</p>
-        </div>
+        <app-empty-state emoji="🏷️" titleKey="noTagsYet" />
       } @else if (selectedTags().length > 0) {
         @if (loadingPlaylist()) {
-          <div class="loader-wrap">
-            <svg class="spinner" viewBox="0 0 24 24" aria-hidden="true">
-              <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="31.4 31.4" stroke-linecap="round"/>
-            </svg>
+          <div class="list">
+            <app-skeleton [count]="6" />
           </div>
         } @else if (playlist()) {
           <h2 class="playlist-title">{{ playlistTitle() }}</h2>
-          <div class="meta-row">
+          <div class="meta-row meta-row--spaced">
             <span class="meta-pill">{{ trackCountLabel() }}</span>
             <span class="meta-sep">·</span>
             <span class="meta-pill">{{ totalDurationLabel() }}</span>
           </div>
           <div class="action-row">
-            <button type="button" class="action-btn tap" [disabled]="queueTracks().length === 0" (click)="playAll()">
-              <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 2l10 6-10 6V2z"/></svg>
+            <button
+              type="button"
+              class="btn"
+              [disabled]="queueTracks().length === 0"
+              (click)="playAll()"
+            >
+              <app-icon name="play" />
               <span>{{ 'playAll' | t }}</span>
             </button>
-            <button type="button" class="action-btn alt tap" [disabled]="queueTracks().length === 0" (click)="shuffleAll()">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+            <button
+              type="button"
+              class="btn btn--ghost"
+              [disabled]="queueTracks().length === 0"
+              (click)="shuffleAll()"
+            >
+              <app-icon name="expand" />
               <span>{{ 'shuffle' | t }}</span>
             </button>
           </div>
           <div class="list">
             @for (t of playlist()?.tracks ?? []; track t.trackId) {
-              <app-track-card [track]="t" [showDuration]="true" [queue]="queueTracks()" (favoriteRemoved)="onTrackSourceRemoved()" />
+              <app-track-card
+                [track]="t"
+                [showDuration]="true"
+                [queue]="queueTracks()"
+                (favoriteRemoved)="onTrackSourceRemoved()"
+              />
             }
           </div>
         }
@@ -76,10 +123,6 @@ interface TagsPlaylist {
     </div>
   `,
   styles: `
-    .page {
-      padding: 0 1.5rem 2rem 2rem;
-      max-width: 720px;
-    }
     .head {
       display: flex;
       align-items: center;
@@ -93,6 +136,17 @@ interface TagsPlaylist {
       font-weight: 700;
       margin: 0;
     }
+    .hint {
+      margin: 0.25rem 0 0.75rem;
+      font-size: 0.8rem;
+      opacity: 0.65;
+    }
+
+    .chip[disabled] {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
     .sort {
       display: flex;
       gap: 8px;
@@ -125,7 +179,10 @@ interface TagsPlaylist {
       color: var(--accent);
       font-size: 14px;
       cursor: pointer;
-      transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+      transition:
+        background 0.2s ease,
+        color 0.2s ease,
+        border-color 0.2s ease;
     }
     .chip:hover {
       background: var(--bg-card);
@@ -135,49 +192,11 @@ interface TagsPlaylist {
       color: var(--bg);
       border-color: var(--accent);
     }
-    .empty {
-      text-align: center;
-      padding: 4rem 2rem;
-    }
-    .empty-icon {
-      font-size: 3rem;
-      display: block;
-      margin-bottom: 1rem;
-      opacity: 0.8;
-    }
-    .empty-title {
-      font-size: 1rem;
-      color: var(--accent-dim);
-    }
-    .loader-wrap {
-      display: flex;
-      justify-content: center;
-      padding: 3rem;
-    }
-    .spinner {
-      width: 40px;
-      height: 40px;
-      color: var(--accent-dim);
-      animation: spin 0.8s linear infinite;
-    }
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
     .playlist-title {
       font-size: 1.5rem;
       font-weight: 600;
       margin-bottom: 1rem;
       color: var(--accent);
-    }
-    .meta-row {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      margin-bottom: 0.7rem;
-    }
-    .meta-pill {
-      font-size: 0.86rem;
-      color: var(--accent-dim);
     }
     .meta-sep {
       color: var(--accent-dim);
@@ -190,41 +209,14 @@ interface TagsPlaylist {
       margin-bottom: 1.5rem;
       align-items: center;
     }
-    .action-btn {
-      border: 1px solid var(--border);
-      background: var(--bg-card);
-      color: var(--accent);
-      border-radius: 999px;
-      height: 40px;
-      padding: 0 1rem;
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      cursor: pointer;
-      transition:
-        border-color 0.2s ease,
-        background 0.2s ease,
-        color 0.2s ease,
-        transform 0.12s ease;
+    .btn:hover:not(:disabled) {
+      border-color: var(--accent-dim);
     }
-    .action-btn svg {
+    .btn svg {
       width: 16px;
       height: 16px;
     }
-    .action-btn:hover:not(:disabled) {
-      background: var(--bg-hover);
-      border-color: var(--accent-dim);
-      color: var(--accent);
-    }
-    .action-btn.alt svg {
-      width: 15px;
-      height: 15px;
-    }
-    .action-btn:disabled {
-      opacity: 0.45;
-      cursor: not-allowed;
-    }
-    .action-btn.tap:active:not(:disabled) {
+    .btn:active:not(:disabled) {
       transform: scale(0.97);
     }
     .list {
@@ -257,9 +249,14 @@ export class MoodComponent {
       duration: normalizeDurationSeconds(track.duration) ?? undefined,
     })),
   );
-  readonly trackCountLabel = computed(() => `${this.queueTracks().length} ${this.settings.t('tracksSuffix')}`);
+  readonly trackCountLabel = computed(
+    () => `${this.queueTracks().length} ${this.settings.t('tracksSuffix')}`,
+  );
   readonly totalDurationLabel = computed(() => {
-    const totalSec = this.queueTracks().reduce((sum, track) => sum + (normalizeDurationSeconds(track.duration) ?? 0), 0);
+    const totalSec = this.queueTracks().reduce(
+      (sum, track) => sum + (normalizeDurationSeconds(track.duration) ?? 0),
+      0,
+    );
     return formatDurationCompact(totalSec);
   });
 
@@ -289,6 +286,16 @@ export class MoodComponent {
     });
   }
 
+  /** Hint shown when the selection has reached the maximum. */
+  readonly tagLimitHint = computed(() =>
+    this.settings.t('maxTagsReached', { n: MAX_SELECTED_TAGS }),
+  );
+
+  /** True once the user has picked as many tags as the playlist can combine. */
+  atTagLimit(): boolean {
+    return this.selectedTags().length >= MAX_SELECTED_TAGS;
+  }
+
   isSelected(tag: string): boolean {
     const n = tag.trim().toLowerCase();
     return this.selectedTags().some((t) => t.trim().toLowerCase() === n);
@@ -303,6 +310,11 @@ export class MoodComponent {
     if (idx >= 0) {
       const next = [...cur.slice(0, idx), ...cur.slice(idx + 1)];
       this.selectedTags.set(next);
+    } else if (cur.length >= MAX_SELECTED_TAGS) {
+      // The server rejects more than this, so refuse here rather than showing
+      // an empty playlist with no explanation.
+      this.toast.show(this.settings.t('maxTagsReached', { n: MAX_SELECTED_TAGS }));
+      return;
     } else {
       this.selectedTags.set([...cur, t]);
     }

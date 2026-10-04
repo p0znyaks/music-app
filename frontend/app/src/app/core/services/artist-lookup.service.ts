@@ -1,12 +1,17 @@
 import { Injectable, inject } from '@angular/core';
+import { Router } from '@angular/router';
 import { Observable, catchError, finalize, map, of, shareReplay } from 'rxjs';
 import { ApiService } from './api.service';
 
-type ArtistSearchHit = { browseId: string; name: string };
+interface ArtistSearchHit {
+  browseId: string;
+  name: string;
+}
 
 @Injectable({ providedIn: 'root' })
 export class ArtistLookupService {
   private readonly api = inject(ApiService);
+  private readonly router = inject(Router);
   private readonly cache = new Map<string, string | null>();
   private readonly inflight = new Map<string, Observable<string | null>>();
 
@@ -42,5 +47,23 @@ export class ArtistLookupService {
     );
     this.inflight.set(normalized, req$);
     return req$;
+  }
+
+  /**
+   * Resolves an artist by name and navigates to their page.
+   *
+   * Every row that links to an artist went through the same resolve-then-navigate
+   * dance, so it lives here instead of being repeated per component.
+   */
+  openArtist(name: string): void {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      return;
+    }
+    this.resolveBrowseIdByName(trimmed).subscribe((browseId) => {
+      if (browseId) {
+        void this.router.navigate(['/artists', browseId]);
+      }
+    });
   }
 }

@@ -1,14 +1,38 @@
+# Compose project name, so containers, volumes and networks are labelled
+# "muze" rather than after the directory name.
+name: muze
+
 services:
   postgres:
     image: postgres:16
+    container_name: muze-postgres
     restart: always
     env_file: .env
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - app_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    # Without a cap a runaway query can take the host down and take every other
+    # container with it. Sized well above the observed ~41 MB.
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: "1.0"
+    logging: &default_logging
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
 
   redis:
+    container_name: muze-redis
     image: redis:7-alpine
     restart: always
     command: ["redis-server", "--appendonly", "yes"]
@@ -16,41 +40,81 @@ services:
       - redis_data:/data
     networks:
       - app_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          # Holds the search, image and recommendation caches, so it needs room
+          # to grow while staying bounded.
+          memory: 512m
+          cpus: "0.5"
+    logging: *default_logging
 
   backend:
+    container_name: muze-backend
     build: ./backend
     restart: always
     env_file: .env
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - app_network
     volumes:
       - audio_cache:/app/audio_cache
+      # Read-write on purpose: yt-dlp refreshes/rewrites the cookie jar in place.
       - ./cookies.txt:/app/cookies.txt
-
-  frontend:
-    build: ./frontend
-    volumes:
-      - ./frontend/app:/app/app
-    restart: always
-    networks:
-      - app_network
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          # Node plus up to three yt-dlp processes; steady state measured ~73 MB,
+          # so this leaves room for bursts without putting the host at risk.
+          memory: 1500m
+          cpus: "2.0"
+    logging: *default_logging
 
   nginx:
-    image: nginx:alpine
+    container_name: muze-nginx
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
     restart: always
     ports:
       - "8443:8443"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/certs:/etc/nginx/certs:ro
     depends_on:
-      - backend
-      - frontend
+      backend:
+        condition: service_healthy
+    volumes:
+      - ./nginx/certs:/etc/nginx/certs:ro
+      - audio_cache:/audio_cache:ro
     networks:
       - app_network
+    healthcheck:
+      # BusyBox wget cannot skip TLS verification for our self-signed cert,
+      # so assert that the TLS listener is actually accepting connections.
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 8443"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          # Serves the static bundle and proxies the API; measured ~7 MB.
+          memory: 128m
+          cpus: "0.5"
+    logging: *default_logging
 
 volumes:
   postgres_data:

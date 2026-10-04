@@ -5,33 +5,36 @@ import {
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
-} from 'typeorm';
-import { User } from './user.entity';
+} from "typeorm";
+import { User } from "./user.entity";
 
-@Entity('track_tags')
+@Entity("track_tags")
 export class TrackTag {
   @PrimaryGeneratedColumn()
   id: number;
 
   @ManyToOne(() => User)
-  @JoinColumn({ name: 'user_id' })
+  @JoinColumn({ name: "user_id" })
   user: User;
 
-  @Column({ name: 'track_id', type: 'varchar' })
+  @Column({ name: "track_id", type: "varchar" })
   trackId: string;
 
-  @Column({ type: 'varchar' })
+  @Column({ type: "varchar" })
   title: string;
 
-  @Column({ type: 'varchar' })
+  @Column({ type: "varchar" })
   artist: string;
 
-  @Column({ name: 'thumbnail_url', type: 'varchar', nullable: true })
+  @Column({ name: "thumbnail_url", type: "varchar", nullable: true })
   thumbnailUrl: string | null;
 
-  @Column({ type: 'varchar' })
+  @Column({ type: "integer", nullable: true })
+  duration: number | null;
+
+  @Column({ type: "varchar" })
   tag: string;
 
-  @CreateDateColumn({ name: 'added_at', type: 'timestamp' })
+  @CreateDateColumn({ name: "added_at", type: "timestamp" })
   addedAt: Date;
 }

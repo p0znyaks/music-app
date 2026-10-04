@@ -14,12 +14,12 @@ export interface AuthUser {
   role: string;
 }
 
-type JwtPayload = {
+interface JwtPayload {
   id?: number;
   email?: string;
   role?: string;
   exp?: number;
-};
+}
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
@@ -52,15 +52,15 @@ export class AuthService {
   }
 
   login(email: string, password: string): Observable<{ token: string }> {
-    return this.api.post<{ token: string }>('auth/login', { email, password }).pipe(
-      tap((res) => this.persistToken(res.token)),
-    );
+    return this.api
+      .post<{ token: string }>('auth/login', { email, password })
+      .pipe(tap((res) => this.persistToken(res.token)));
   }
 
   register(username: string, email: string, password: string): Observable<{ token: string }> {
-    return this.api.post<{ token: string }>('auth/register', { username, email, password }).pipe(
-      tap((res) => this.persistToken(res.token)),
-    );
+    return this.api
+      .post<{ token: string }>('auth/register', { username, email, password })
+      .pipe(tap((res) => this.persistToken(res.token)));
   }
 
   logout(): void {

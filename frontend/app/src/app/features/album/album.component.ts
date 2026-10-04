@@ -1,48 +1,44 @@
 import { CommonModule } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../core/services/api.service';
 import { ArtistLookupService } from '../../core/services/artist-lookup.service';
 import { BackNavigationService } from '../../core/services/back-navigation.service';
 import { type PlayerTrack } from '../../core/services/player.service';
+import { ThumbComponent } from '../../shared/components/thumb/thumb.component';
 import { TrackCardComponent } from '../../shared/components/track-card/track-card.component';
 import type { AlbumDetailDto } from '../search/search.model';
 import { AppTrack } from '../../shared/models/track.model';
 import { formatDurationCompact, normalizeDurationSeconds } from '../../shared/utils/duration.util';
 import { TranslatePipe } from '../../shared/pipes/t.pipe';
 import { AppSettingsService } from '../../core/services/app-settings.service';
+import { SkeletonComponent } from '../../shared/components/skeleton/skeleton.component';
 
 @Component({
   selector: 'app-album',
   standalone: true,
-  imports: [CommonModule, TrackCardComponent, TranslatePipe],
+  imports: [CommonModule, TrackCardComponent, TranslatePipe, ThumbComponent, SkeletonComponent],
   template: `
     <div class="page">
       @if (error()) {
-        <p class="err">{{ error() }}</p>
+        <p class="error-text">{{ error() }}</p>
         <button type="button" class="back tap" (click)="back()">← {{ 'back' | t }}</button>
       } @else if (loading()) {
-        <div class="skel skel-lg"></div>
+        <app-skeleton variant="lg" />
         <div class="skel-list">
-          @for (i of [0, 1, 2, 3, 4]; track i) {
-            <div class="skel skel-row"></div>
-          }
+          <app-skeleton [count]="5" />
         </div>
       } @else if (detail(); as d) {
         <div class="head">
           <button type="button" class="back tap" (click)="back()">← {{ 'back' | t }}</button>
           <div class="hero">
-            @if (d.thumbnailUrl) {
-              <img class="cover" [src]="d.thumbnailUrl" [alt]="d.title" width="120" height="120" />
-            } @else {
-              <div class="cover-ph" aria-hidden="true"></div>
-            }
+            <app-thumb class="cover" [src]="d.thumbnailUrl" [alt]="d.title" [size]="120" />
             <div class="meta">
               <h1>{{ d.title }}</h1>
               <button
                 type="button"
                 class="sub sub-link tap"
-                (click)="openArtist(d.artist)"
+                (click)="artistLookup.openArtist(d.artist)"
                 [attr.aria-label]="'Открыть исполнителя ' + d.artist"
               >
                 {{ d.artist }}
@@ -68,10 +64,6 @@ import { AppSettingsService } from '../../core/services/app-settings.service';
     </div>
   `,
   styles: `
-    .page {
-      padding: 0 1.5rem 2rem 2rem;
-      max-width: 720px;
-    }
     .head {
       display: flex;
       flex-direction: column;
@@ -88,13 +80,6 @@ import { AppSettingsService } from '../../core/services/app-settings.service';
       height: 120px;
       border-radius: 10px;
       object-fit: cover;
-      flex-shrink: 0;
-    }
-    .cover-ph {
-      width: 120px;
-      height: 120px;
-      border-radius: 10px;
-      background: #2a2a2a;
       flex-shrink: 0;
     }
     .meta {
@@ -139,15 +124,6 @@ import { AppSettingsService } from '../../core/services/app-settings.service';
       cursor: pointer;
       font-size: 0.85rem;
     }
-    .meta-row {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-    .meta-pill {
-      font-size: 0.86rem;
-      color: var(--accent-dim);
-    }
     .meta-sep {
       color: var(--accent-dim);
       opacity: 0.7;
@@ -157,36 +133,11 @@ import { AppSettingsService } from '../../core/services/app-settings.service';
       flex-direction: column;
       gap: 8px;
     }
-    .err {
-      color: #c44;
-      margin-bottom: 1rem;
-    }
-    .skel {
-      border-radius: 10px;
-      background: var(--bg-card);
-      animation: pulse 1.2s ease-in-out infinite;
-    }
-    .skel-lg {
-      height: 140px;
-      max-width: 400px;
-    }
     .skel-list {
       margin-top: 1rem;
       display: flex;
       flex-direction: column;
       gap: 8px;
-    }
-    .skel-row {
-      height: 64px;
-    }
-    @keyframes pulse {
-      0%,
-      100% {
-        opacity: 0.55;
-      }
-      50% {
-        opacity: 0.9;
-      }
     }
   `,
 })
@@ -195,19 +146,25 @@ export class AlbumComponent {
   private static readonly LAST_VIEW_KEY = 'last.view';
   private static readonly detailCache = new Map<string, AlbumDetailDto>();
   readonly api = inject(ApiService);
-  readonly router = inject(Router);
   private readonly settings = inject(AppSettingsService);
-  private readonly artistLookup = inject(ArtistLookupService);
+  readonly artistLookup = inject(ArtistLookupService);
   private readonly backNavigation = inject(BackNavigationService);
   private readonly route = inject(ActivatedRoute);
 
   readonly loading = signal(true);
   readonly error = signal<string | null>(null);
   readonly detail = signal<AlbumDetailDto | null>(null);
-  readonly queueTracks = computed<PlayerTrack[]>(() => this.detail()?.tracks.map((t) => this.toPlayerTrack(t)) ?? []);
-  readonly trackCountLabel = computed(() => `${this.queueTracks().length} ${this.settings.t('tracksSuffix')}`);
+  readonly queueTracks = computed<PlayerTrack[]>(
+    () => this.detail()?.tracks.map((t) => this.toPlayerTrack(t)) ?? [],
+  );
+  readonly trackCountLabel = computed(
+    () => `${this.queueTracks().length} ${this.settings.t('tracksSuffix')}`,
+  );
   readonly totalDurationLabel = computed(() => {
-    const totalSec = this.queueTracks().reduce((sum, track) => sum + (normalizeDurationSeconds(track.duration) ?? 0), 0);
+    const totalSec = this.queueTracks().reduce(
+      (sum, track) => sum + (normalizeDurationSeconds(track.duration) ?? 0),
+      0,
+    );
     return formatDurationCompact(totalSec);
   });
 
@@ -263,18 +220,5 @@ export class AlbumComponent {
       thumbnailUrl: t.thumbnailUrl || undefined,
       duration: t.duration ?? undefined,
     };
-  }
-
-  openArtist(artistName: string): void {
-    const name = artistName.trim();
-    if (!name) {
-      return;
-    }
-    this.artistLookup.resolveBrowseIdByName(name).subscribe((browseId) => {
-      if (!browseId) {
-        return;
-      }
-      void this.router.navigate(['/artists', browseId]);
-    });
   }
 }

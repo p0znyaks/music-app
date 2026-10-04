@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { BehaviorSubject, Observable, catchError, map, of, shareReplay, switchMap, tap } from 'rxjs';
+import { BehaviorSubject, Observable, catchError, map, of, switchMap, tap } from 'rxjs';
 import { ApiService } from './api.service';
 import type { AppTrack } from '../../shared/models/track.model';
 
@@ -34,8 +34,12 @@ export class TagsService {
     }
 
     const real$ = this.changed$.pipe(
-      switchMap((version) => this.api.get<Array<{ tag: string }>>(`tags/track/${encodeURIComponent(tid)}?_=${version}`)),
-      map((rows) => (rows ?? []).map((r) => r.tag).filter((t) => typeof t === 'string' && t.trim().length > 0)),
+      switchMap((version) =>
+        this.api.get<{ tag: string }[]>(`tags/track/${encodeURIComponent(tid)}?_=${version}`),
+      ),
+      map((rows) =>
+        (rows ?? []).map((r) => r.tag).filter((t) => typeof t === 'string' && t.trim().length > 0),
+      ),
       map((tags) => {
         const seen = new Set<string>();
         const out: string[] = [];
@@ -64,11 +68,15 @@ export class TagsService {
     }
 
     const req$ = this.changed$.pipe(
-      switchMap((version) => this.api.get<Array<{ tag: string }>>(`tags/distinct?sort=${encodeURIComponent(s)}&_=${version}`)),
-        map((rows) => (rows ?? []).map((r) => r.tag).filter((t) => typeof t === 'string' && t.trim().length > 0)),
-        map((tags) => tags.map((t) => t.trim())),
-        catchError(() => of([])),
-      );
+      switchMap((version) =>
+        this.api.get<{ tag: string }[]>(`tags/distinct?sort=${encodeURIComponent(s)}&_=${version}`),
+      ),
+      map((rows) =>
+        (rows ?? []).map((r) => r.tag).filter((t) => typeof t === 'string' && t.trim().length > 0),
+      ),
+      map((tags) => tags.map((t) => t.trim())),
+      catchError(() => of([])),
+    );
     this.distinctCache.set(s, req$);
     return req$;
   }
@@ -94,13 +102,10 @@ export class TagsService {
   removeTagFromTrack(trackId: string, tag: string): Observable<string | null> {
     const tid = (trackId ?? '').trim();
     const t = tag.trim();
-    return this.api
-      .delete(`tags/track/${encodeURIComponent(tid)}/${encodeURIComponent(t)}`)
-      .pipe(
-        tap(() => {
-          this.invalidate();
-        }),
-      );
+    return this.api.delete(`tags/track/${encodeURIComponent(tid)}/${encodeURIComponent(t)}`).pipe(
+      tap(() => {
+        this.invalidate();
+      }),
+    );
   }
 }
-

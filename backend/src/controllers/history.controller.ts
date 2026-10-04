@@ -1,21 +1,26 @@
-import { Request, Response } from 'express';
-import { AppDataSource } from '../services/dataSource';
-import { ListenHistory } from '../entities/listen-history.entity';
-import { User } from '../entities/user.entity';
+import { Request, Response } from "express";
+import { AppDataSource } from "../services/dataSource";
+import { ListenHistory } from "../entities/listen-history.entity";
+import { User } from "../entities/user.entity";
+import { completeTrackMedia } from "../services/track-media.service";
 
 export async function addHistory(req: Request, res: Response) {
   const userId = req.user?.id;
   if (userId === undefined) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ message: "Unauthorized" });
   }
 
   const { trackId, title, artist, thumbnailUrl, duration } = req.body ?? {};
-  if (typeof trackId !== 'string' || !trackId.trim()) {
-    return res.status(400).json({ message: 'trackId is required' });
+  if (typeof trackId !== "string" || !trackId.trim()) {
+    return res.status(400).json({ message: "trackId is required" });
   }
-  if (typeof title !== 'string' || typeof artist !== 'string') {
-    return res.status(400).json({ message: 'title and artist are required' });
+  if (typeof title !== "string" || typeof artist !== "string") {
+    return res.status(400).json({ message: "title and artist are required" });
   }
+
+  // Resolved before the write: history is the seed pool for recommendations, so
+  // rows stored here must carry a length even when the client sent none.
+  const media = await completeTrackMedia({ trackId, thumbnailUrl, duration });
 
   const repo = AppDataSource.getRepository(ListenHistory);
   const row = repo.create({
@@ -23,8 +28,8 @@ export async function addHistory(req: Request, res: Response) {
     trackId: trackId.trim(),
     title,
     artist,
-    thumbnailUrl: typeof thumbnailUrl === 'string' ? thumbnailUrl : null,
-    duration: typeof duration === 'number' ? duration : null,
+    thumbnailUrl: media.thumbnailUrl,
+    duration: media.duration,
   });
   await repo.save(row);
 
@@ -42,13 +47,13 @@ export async function addHistory(req: Request, res: Response) {
 export async function listHistory(req: Request, res: Response) {
   const userId = req.user?.id;
   if (userId === undefined) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ message: "Unauthorized" });
   }
 
   const repo = AppDataSource.getRepository(ListenHistory);
   const rows = await repo.find({
     where: { user: { id: userId } },
-    order: { listenedAt: 'DESC' },
+    order: { listenedAt: "DESC" },
     take: 50,
   });
 

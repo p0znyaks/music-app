@@ -1,0 +1,190 @@
+/**
+ * Shared building blocks.
+ *
+ * These used to be copy-pasted into every component's inline styles, which is
+ * why `.page` alone appeared fourteen times with the same three declarations.
+ * Keeping them here means a spacing or radius change lands everywhere at once.
+ * Component-specific rules stay in the component.
+ */
+
+/* --- Layout ----------------------------------------------------------- */
+
+.page {
+  padding: var(--page-pad);
+  max-width: var(--page-max-width);
+}
+
+.page--full {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-5);
+}
+
+/* --- Surfaces --------------------------------------------------------- */
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: var(--sp-4);
+}
+
+.card--form {
+  width: 100%;
+  max-width: 380px;
+  border-radius: var(--r-lg);
+}
+
+/* --- Feedback --------------------------------------------------------- */
+
+.error-text {
+  color: var(--danger);
+  font-size: 0.85rem;
+}
+
+/* --- Buttons ---------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  height: 40px;
+  padding: 0 var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background: var(--bg-card);
+  color: var(--accent);
+  cursor: pointer;
+  transition:
+    border-color var(--dur) var(--ease),
+    background-color var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    opacity var(--dur) var(--ease);
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn--ghost {
+  background: transparent;
+  border-color: transparent;
+}
+
+.btn--ghost:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: transparent;
+}
+
+/* --- Form controls ---------------------------------------------------- */
+
+.field {
+  width: 100%;
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg);
+  color: var(--accent);
+  transition: border-color var(--dur) var(--ease);
+}
+
+.field:focus {
+  outline: none;
+  border-color: var(--accent-dim);
+}
+
+.field::placeholder {
+  color: var(--accent-dim);
+}
+
+/* --- Chips ------------------------------------------------------------ */
+
+.chip {
+  padding: var(--sp-1) var(--sp-3);
+  border: 1px solid var(--overlay-chip-border);
+  border-radius: var(--r-pill);
+  background: var(--overlay-chip-bg);
+  color: var(--accent-dim);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition:
+    background-color var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
+}
+
+.chip:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--overlay-chip-border-strong);
+}
+
+.chip[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* --- Loading skeletons ------------------------------------------------
+   The pulse was defined four times with two slightly different opacities;
+   one definition now drives every skeleton in the app. */
+
+.skeleton {
+  border-radius: var(--r-md);
+  background: var(--bg-card);
+  animation: skeleton-pulse 1.2s ease-in-out infinite;
+}
+
+.skeleton--subtle {
+  background: var(--bg-hover);
+}
+
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+/* --- Placeholder and flexible column ------------------------------------
+   Cover placeholders are sized per context (44/48/72px), so only the parts
+   that never change are shared: the fill colour and the square ratio. */
+
+.cover-ph {
+  background: var(--border);
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+/* --- Metadata strip ------------------------------------------------------
+   "12 tracks · 45 min" under a page heading. The spacing under it was the only
+   thing that differed between call sites, so it stays as a modifier. */
+
+.meta-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.meta-row--spaced {
+  margin-bottom: var(--sp-3);
+}
+
+.meta-pill {
+  font-size: 0.86rem;
+  color: var(--accent-dim);
+}
+
+.meta-sep {
+  color: var(--accent-dim);
+}

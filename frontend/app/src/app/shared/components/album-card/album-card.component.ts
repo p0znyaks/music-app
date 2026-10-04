@@ -1,27 +1,24 @@
 import { CommonModule } from '@angular/common';
 import { Component, inject, input } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { RouterLink } from '@angular/router';
 import { ArtistLookupService } from '../../../core/services/artist-lookup.service';
 import type { YtmAlbumCard } from '../../../features/search/search.model';
 import { TranslatePipe } from '../../pipes/t.pipe';
+import { ThumbComponent } from '../thumb/thumb.component';
 
 @Component({
   selector: 'app-album-card',
   standalone: true,
-  imports: [CommonModule, RouterLink, TranslatePipe],
+  imports: [CommonModule, RouterLink, TranslatePipe, ThumbComponent],
   template: `
     <a
-      class="row-card row-album tap"
+      class="row-card tap"
       [routerLink]="['/albums', album().browseId]"
       (click)="onAlbumClick()"
       [attr.aria-label]="album().title + ', ' + album().artist"
     >
       <div class="row-thumb album-cover">
-        @if (album().thumbnailUrl) {
-          <img [src]="album().thumbnailUrl" [alt]="album().title" width="48" height="48" />
-        } @else {
-          <div class="thumb-ph" aria-hidden="true"></div>
-        }
+        <app-thumb [src]="album().thumbnailUrl" [alt]="album().title" [size]="48" />
       </div>
       <div class="row-info">
         <div class="row-title">{{ album().title }}</div>
@@ -81,7 +78,6 @@ import { TranslatePipe } from '../../pipes/t.pipe';
     .thumb-ph {
       width: 48px;
       height: 48px;
-      background: var(--border);
     }
     .row-info {
       flex: 1;
@@ -154,7 +150,6 @@ export class AlbumCardComponent {
   readonly album = input.required<YtmAlbumCard>();
 
   private readonly artistLookup = inject(ArtistLookupService);
-  private readonly router = inject(Router);
 
   onAlbumClick(): void {
     // If we're currently on an artist page, remember it as album "back" target.
@@ -173,19 +168,6 @@ export class AlbumCardComponent {
   onArtistClick(ev: MouseEvent, artistName: string): void {
     ev.preventDefault();
     ev.stopPropagation();
-    this.openArtist(artistName);
-  }
-
-  private openArtist(artistName: string): void {
-    const name = artistName.trim();
-    if (!name) {
-      return;
-    }
-    this.artistLookup.resolveBrowseIdByName(name).subscribe((browseId) => {
-      if (!browseId) {
-        return;
-      }
-      void this.router.navigate(['/artists', browseId]);
-    });
+    this.artistLookup.openArtist(artistName);
   }
 }

@@ -1,13 +1,46 @@
+@import './styles/base.css';
+
 :root {
+  /* --- Palette ------------------------------------------------------- */
   --bg: #0a0a0a;
   --bg-card: #141414;
   --bg-hover: #1c1c1c;
   --accent: #ffffff;
   --accent-dim: #a0a0a0;
   --danger: #ff4444;
+  --danger-strong: #d92b2b;
+  --on-danger: #0b0b0c;
   --border: #2a2a2a;
+  --border-strong: #3a3a3a;
 
   --text: var(--accent);
+
+  /* --- Spacing scale -------------------------------------------------
+     Used instead of ad-hoc rem values so rhythm stays consistent. */
+  --sp-1: 0.25rem;
+  --sp-2: 0.5rem;
+  --sp-3: 0.75rem;
+  --sp-4: 1rem;
+  --sp-5: 1.5rem;
+  --sp-6: 2rem;
+
+  /* Page gutters: the app reserves a wider left edge for the sidebar. */
+  --page-pad: 0 var(--sp-5) var(--sp-6) var(--sp-6);
+  --page-max-width: 720px;
+
+  /* --- Corner radii -------------------------------------------------- */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-xl: 16px;
+  --r-pill: 999px;
+
+  /* --- Elevation ---------------------------------------------------- */
+  --shadow-pop: 0 8px 28px rgba(0, 0, 0, 0.5);
+
+  /* --- Motion -------------------------------------------------------- */
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur: 0.2s;
 
   /* Semi-transparent overlays used in “chips/tags” UI. */
   --overlay-chip-bg: rgba(255, 255, 255, 0.06);
@@ -23,15 +56,22 @@
 }
 
 [data-theme='light'] {
+  /* --- Palette ------------------------------------------------------- */
   --bg: #f6f7fb;
   --bg-card: #ffffff;
   --bg-hover: #eef1f7;
   --accent: #1d2433;
   --accent-dim: #556079;
   --danger: #d53b3b;
+  --danger-strong: #b92e2e;
+  --on-danger: #ffffff;
   --border: #d7ddeb;
+  --border-strong: #bcc4d6;
 
   --text: var(--accent);
+  --shadow-pop: 0 8px 24px rgba(29, 36, 51, 0.12);
+
+  /* Spacing, radii and motion are shared with the dark theme. */
 
   --overlay-chip-bg: rgba(0, 0, 0, 0.06);
   --overlay-chip-border: rgba(0, 0, 0, 0.1);
@@ -60,7 +100,14 @@ body {
 }
 
 body {
-  font-family: system-ui, 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family:
+    system-ui,
+    'Inter',
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
   background: var(--bg);
   min-height: 100dvh;
   color: var(--accent);
@@ -87,7 +134,9 @@ input {
 a {
   color: inherit;
   text-decoration: none;
-  transition: color 0.2s ease, opacity 0.2s ease;
+  transition:
+    color 0.2s ease,
+    opacity 0.2s ease;
 }
 
 * {

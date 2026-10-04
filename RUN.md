@@ -1,63 +1,80 @@
 # Запуск
 
-## DEV
-```bash
-docker compose up -d
-```
-- nginx :8443 → frontend :4200 (dev server)
+Единый конфиг: фронт собирается в продакшен-бандл, всё раздаёт nginx по HTTPS.
 
-## PROD
+## Первый запуск
 ```bash
-docker compose -f docker-compose.prod.yml up --build -d
+cp .env.example .env       # затем задай POSTGRES_PASSWORD и JWT_SECRET
+node gen-cert-for-server.js <IP-СЕРВЕРА>   # самоподписанный сертификат
+docker compose up --build -d
 ```
-- nginx :1443 (SSL, reverse proxy, static bundle)
+
+Приложение: `https://localhost:8443` (в браузере предупреждение о самоподписанном
+сертификате — это ожидаемо, см. `CERT.md`).
+
+## Обновление
+```bash
+docker compose up --build -d
+```
 
 ## Остановка
 ```bash
-docker compose down
+docker compose down          # с удалением данных: docker compose down -v
 ```
 
-## Проверка
-- DEV: `https://localhost:8443`
-- PROD: `https://localhost:1443`
-
-## Локально → git push → сервер git pull → docker up
-
-## Обновление cookies YouTube
-
-### Локально
-1. Экспортируй cookies из браузера в файл `cookies.txt` (формат Netscape)
-   - Chrome: расширение "EditThisCookie" → Export → сохранить как `cookies.txt`
-   - Или: `yt-dlp --cookies-from-browser chrome --cookies cookies.txt ...`
-
-2. Скопируй файл на сервер:
+## Состояние сервисов
 ```bash
-scp cookies.txt deploy@your-server:/home/deploy/music-app/
+docker compose ps            # все сервисы должны быть (healthy)
+docker compose logs -f backend
 ```
 
-### На сервере
+## Миграции БД
+Схема применяется автоматически при старте бэкенда (`migrationsRun`).
+Ручные команды (для разработки):
 ```bash
-cd ~/music-app
-git pull origin main
-docker compose -f docker-compose.prod.yml down
-docker compose -f docker-compose.prod.yml up -d --build
+docker compose exec backend npm run migration:generate -- src/migrations/Название
+docker compose exec backend npm run migration:run
+docker compose exec backend npm run migration:revert
 ```
 
-### Проверка что cookies работают
+## Тесты
 ```bash
-# Включи логирование в .env:
+docker compose exec backend npm test        # 177 тестов, ~5 c
+docker compose exec backend npm run test:load   # нагрузочный прогон (долгий)
+```
+
+## Cookies YouTube
+`cookies.txt` **не входит в репозиторий** (в `.gitignore`): экспортируй вручную
+при необходимости — см. раздел ниже.
+
+### Экспорт cookies
+1. В браузере: расширение «EditThisCookie» → Export → сохранить как `cookies.txt`
+   (формат Netscape) в корень проекта
+2. Либо: `yt-dlp --cookies-from-browser chrome --cookies cookies.txt <url>`
+
+Файл монтируется в контейнер как `/app/cookies.txt` и подключается через
+`YTDLP_COOKIES_FILE` в `.env`.
+
+### Проверка, что cookies работают
+```bash
 echo "PYTHON_WORKER_LOG=1" >> .env
+docker compose restart backend
+docker compose logs -f backend
+```
+В логах не должно быть `Sign in to confirm` / `cookies are no longer valid`.
 
-# Рестарт
-docker compose -f docker-compose.prod.yml restart backend
-
-# Смотри логи
-docker compose -f docker-compose.prod.yml logs -f backend
+## Деплой на сервер
+```bash
+# на сервере
+git pull
+docker compose up --build -d
 ```
 
-Если в логах НЕТ `Sign in to confirm` — cookies работают.
+## Производительность
 
-### .env переменные для cookies
-```
-YTDLP_COOKIES_FILE=/app/cookies.txt
-```
+| Что | Как |
+|---|---|
+| Stream URL | InnerTube (Android client) через резидентный Python-воркер, fallback на yt-dlp |
+| TTL ссылки | `REDIS_TTL_STREAM_SEC=18000` (5 ч; ссылка живёт ~6 ч) |
+| Аудио на диске | `audio_cache`, лимит `AUDIO_CACHE_MAX_BYTES` (1 ГБ), LRU-очистка |
+| Воркеры | `PYTHON_WORKERS=2` |

@@ -8,53 +8,73 @@ import { formatDurationCompact, normalizeDurationSeconds } from '../../shared/ut
 import { TrackCardComponent } from '../../shared/components/track-card/track-card.component';
 import { AppSettingsService } from '../../core/services/app-settings.service';
 import { TranslatePipe } from '../../shared/pipes/t.pipe';
+import { EmptyStateComponent } from '../../shared/components/empty-state/empty-state.component';
+import { SkeletonComponent } from '../../shared/components/skeleton/skeleton.component';
+import { IconComponent } from '../../shared/components/icon/icon.component';
 
 @Component({
   selector: 'app-favorites',
   standalone: true,
-  imports: [CommonModule, TrackCardComponent, TranslatePipe],
+  imports: [
+    CommonModule,
+    TrackCardComponent,
+    TranslatePipe,
+    IconComponent,
+    EmptyStateComponent,
+    SkeletonComponent,
+  ],
   template: `
     <div class="page">
       <h1>{{ 'favorites' | t }}</h1>
       <div class="favorites-meta">
-        <div class="meta-row">
+        <div class="meta-row meta-row--spaced">
           <span class="meta-pill">{{ trackCountLabel() }}</span>
           <span class="meta-sep">·</span>
           <span class="meta-pill">{{ totalDurationLabel() }}</span>
         </div>
         <div class="action-row">
-          <button type="button" class="action-btn tap" [disabled]="tracks().length === 0" (click)="playAll()">
-            <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 2l10 6-10 6V2z"/></svg>
+          <button
+            type="button"
+            class="action-btn tap"
+            [disabled]="tracks().length === 0"
+            (click)="playAll()"
+          >
+            <app-icon name="play" />
             <span>{{ 'playAll' | t }}</span>
           </button>
-          <button type="button" class="action-btn alt tap" [disabled]="tracks().length === 0" (click)="shuffleAll()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+          <button
+            type="button"
+            class="action-btn alt tap"
+            [disabled]="tracks().length === 0"
+            (click)="shuffleAll()"
+          >
+            <app-icon name="expand" />
             <span>{{ 'shuffle' | t }}</span>
           </button>
         </div>
       </div>
       @if (loading()) {
-        <p class="muted">{{ 'loading' | t }}</p>
-      } @else if (tracks().length === 0) {
-        <div class="empty">
-          <div class="heart" aria-hidden="true">❤️</div>
-          <p class="empty-title">{{ 'favoritesEmptyTitle' | t }}</p>
-          <p class="empty-sub">{{ 'favoritesEmptySub' | t }}</p>
+        <div class="list">
+          <app-skeleton [count]="6" />
         </div>
+      } @else if (tracks().length === 0) {
+        <app-empty-state emoji="❤️" titleKey="favoritesEmptyTitle" subKey="favoritesEmptySub" />
       } @else {
         <div class="list">
           @for (t of tracks(); track t.trackId) {
-            <app-track-card [track]="t" [showDuration]="true" [allowTagging]="true" [queue]="queueTracks()" (favoriteRemoved)="load()" />
+            <app-track-card
+              [track]="t"
+              [showDuration]="true"
+              [allowTagging]="true"
+              [queue]="queueTracks()"
+              (favoriteRemoved)="load()"
+            />
           }
         </div>
       }
     </div>
   `,
   styles: `
-    .page {
-      padding: 0 1.5rem 2rem 2rem;
-      max-width: 720px;
-    }
     h1 {
       font-size: 1.75rem;
       font-weight: 700;
@@ -62,16 +82,6 @@ import { TranslatePipe } from '../../shared/pipes/t.pipe';
     }
     .favorites-meta {
       margin-bottom: 1.25rem;
-    }
-    .meta-row {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      margin-bottom: 0.7rem;
-    }
-    .meta-pill {
-      font-size: 0.86rem;
-      color: var(--accent-dim);
     }
     .meta-sep {
       color: var(--accent-dim);
@@ -127,29 +137,6 @@ import { TranslatePipe } from '../../shared/pipes/t.pipe';
       flex-direction: column;
       gap: 0.65rem;
     }
-    .empty {
-      text-align: center;
-      padding: 4rem 1.5rem;
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      max-width: 400px;
-      margin: 2rem auto;
-    }
-    .heart {
-      font-size: 3rem;
-      margin-bottom: 1rem;
-      opacity: 0.85;
-    }
-    .empty-title {
-      font-size: 1.15rem;
-      font-weight: 600;
-      margin-bottom: 0.35rem;
-    }
-    .empty-sub {
-      color: var(--accent-dim);
-      font-size: 0.9rem;
-    }
   `,
 })
 export class FavoritesComponent {
@@ -160,10 +147,17 @@ export class FavoritesComponent {
 
   readonly tracks = signal<AppTrack[]>([]);
   readonly loading = signal(true);
-  readonly queueTracks = computed<PlayerTrack[]>(() => this.tracks().map((track) => this.toPlayerTrack(track)));
-  readonly trackCountLabel = computed(() => `${this.tracks().length} ${this.settings.t('tracksSuffix')}`);
+  readonly queueTracks = computed<PlayerTrack[]>(() =>
+    this.tracks().map((track) => this.toPlayerTrack(track)),
+  );
+  readonly trackCountLabel = computed(
+    () => `${this.tracks().length} ${this.settings.t('tracksSuffix')}`,
+  );
   readonly totalDurationLabel = computed(() => {
-    const totalSec = this.tracks().reduce((sum, track) => sum + (normalizeDurationSeconds(track.duration) ?? 0), 0);
+    const totalSec = this.tracks().reduce(
+      (sum, track) => sum + (normalizeDurationSeconds(track.duration) ?? 0),
+      0,
+    );
     return formatDurationCompact(totalSec);
   });
 

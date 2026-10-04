@@ -1,20 +1,30 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, DestroyRef, effect, ElementRef, inject, signal, viewChild } from '@angular/core';
+import {
+  Component,
+  computed,
+  DestroyRef,
+  effect,
+  ElementRef,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, NavigationEnd, Router } from '@angular/router';
 import {
   catchError,
   combineLatest,
-  debounceTime,
+  debounce,
   distinctUntilChanged,
   filter,
   finalize,
   map,
-  concat,
+  merge,
   type Observable,
   of,
   Subject,
+  timer,
   switchMap,
   tap,
 } from 'rxjs';
@@ -27,14 +37,17 @@ import type { AppTrack } from '../../shared/models/track.model';
 import type { SearchBundle, YtmAlbumCard, YtmArtistCard } from './search.model';
 import { TranslatePipe } from '../../shared/pipes/t.pipe';
 import { AppSettingsService } from '../../core/services/app-settings.service';
+import { EmptyStateComponent } from '../../shared/components/empty-state/empty-state.component';
+import { SkeletonComponent } from '../../shared/components/skeleton/skeleton.component';
+import { IconComponent } from '../../shared/components/icon/icon.component';
 
 type SearchTab = 'tracks' | 'albums' | 'artists' | 'all';
 
-type QueryPayload = {
+interface QueryPayload {
   tracks?: AppTrack[];
   albums?: YtmAlbumCard[];
   artists?: YtmArtistCard[];
-};
+}
 
 function sortTracksByArtistQuery(tracks: AppTrack[], rawQuery: string): AppTrack[] {
   const q = rawQuery.trim().toLowerCase();
@@ -50,14 +63,21 @@ function sortTracksByArtistQuery(tracks: AppTrack[], rawQuery: string): AppTrack
 @Component({
   selector: 'app-search',
   standalone: true,
-  imports: [CommonModule, FormsModule, TrackCardComponent, AlbumCardComponent, ArtistCardComponent, TranslatePipe],
+  imports: [
+    CommonModule,
+    FormsModule,
+    TrackCardComponent,
+    AlbumCardComponent,
+    ArtistCardComponent,
+    TranslatePipe,
+    IconComponent,
+    EmptyStateComponent,
+    SkeletonComponent,
+  ],
   template: `
     <div class="page">
       <div class="search-box">
-        <svg class="lens" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <circle cx="11" cy="11" r="7" />
-          <path d="M21 21l-4.35-4.35" stroke-linecap="round" />
-        </svg>
+        <app-icon class="lens" name="search" />
         <input
           type="search"
           [(ngModel)]="inputModel"
@@ -80,8 +100,19 @@ function sortTracksByArtistQuery(tracks: AppTrack[], rawQuery: string): AppTrack
               (click)="setTab(opt.id)"
             >
               <span class="tab-check" aria-hidden="true">
-                <svg class="check-svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2">
-                  <path class="check-path" d="M3 8.5l3.2 3.2L13 4.5" stroke-linecap="round" stroke-linejoin="round" />
+                <svg
+                  class="check-svg"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.2"
+                >
+                  <path
+                    class="check-path"
+                    d="M3 8.5l3.2 3.2L13 4.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
                 </svg>
               </span>
               <span class="tab-text">{{ opt.label }}</span>
@@ -92,22 +123,18 @@ function sortTracksByArtistQuery(tracks: AppTrack[], rawQuery: string): AppTrack
 
       @if (blockingLoading()) {
         <div class="list">
-          @for (i of skeletons; track i) {
-            <div class="skel"></div>
-          }
+          <app-skeleton [count]="6" />
         </div>
       } @else if (hasSearched()) {
         @if (isEmptyForTab()) {
-          <p class="empty">{{ 'nothingFound' | t }}</p>
+          <app-empty-state titleKey="nothingFound" />
         } @else if (activeTab() === 'all') {
           <div class="sections">
             <section class="section">
               <h2 class="section-title">{{ 'tracksTab' | t }}</h2>
               @if (loadingTracks()) {
                 <div class="list">
-                  @for (i of skeletons; track i) {
-                    <div class="skel"></div>
-                  }
+                  <app-skeleton [count]="6" />
                 </div>
               } @else if (visibleTracks().length > 0) {
                 <div class="list">
@@ -121,9 +148,7 @@ function sortTracksByArtistQuery(tracks: AppTrack[], rawQuery: string): AppTrack
               <h2 class="section-title">{{ 'albumsTab' | t }}</h2>
               @if (loadingAlbums()) {
                 <div class="list">
-                  @for (i of skeletons; track i) {
-                    <div class="skel"></div>
-                  }
+                  <app-skeleton [count]="6" />
                 </div>
               } @else if (visibleAlbums().length > 0) {
                 <div class="list">
@@ -137,9 +162,7 @@ function sortTracksByArtistQuery(tracks: AppTrack[], rawQuery: string): AppTrack
               <h2 class="section-title">{{ 'artistsTab' | t }}</h2>
               @if (loadingArtists()) {
                 <div class="list">
-                  @for (i of skeletons; track i) {
-                    <div class="skel"></div>
-                  }
+                  <app-skeleton [count]="6" />
                 </div>
               } @else if (visibleArtists().length > 0) {
                 <div class="list">
@@ -261,8 +284,7 @@ function sortTracksByArtistQuery(tracks: AppTrack[], rawQuery: string): AppTrack
       transform: scale(0.45) rotate(-12deg);
       transition:
         opacity 0.24s cubic-bezier(0.34, 1.2, 0.64, 1),
-        transform
-          0.24s cubic-bezier(0.34, 1.2, 0.64, 1);
+        transform 0.24s cubic-bezier(0.34, 1.2, 0.64, 1);
     }
     .tab.active .tab-check {
       opacity: 1;
@@ -305,27 +327,6 @@ function sortTracksByArtistQuery(tracks: AppTrack[], rawQuery: string): AppTrack
       flex-direction: column;
       gap: 8px;
     }
-    .skel {
-      height: 72px;
-      border-radius: 10px;
-      background: var(--bg-card);
-      animation: pulse 1.2s ease-in-out infinite;
-    }
-    @keyframes pulse {
-      0%,
-      100% {
-        opacity: 0.55;
-      }
-      50% {
-        opacity: 0.9;
-      }
-    }
-    .empty {
-      text-align: center;
-      color: var(--accent-dim);
-      padding: 4rem 1rem;
-      font-size: 1rem;
-    }
     .sentinel {
       height: 1px;
       width: 100%;
@@ -338,6 +339,16 @@ export class SearchComponent {
   private static readonly QUERY_STORAGE_KEY = 'search.query';
   private static readonly TAB_STORAGE_KEY = 'search.tab';
   private static readonly LAST_VIEW_KEY = 'last.view';
+  private static readonly QUERY_CACHE_LIMIT = 30;
+
+  /** Shortest cached query that may stand in for a longer one being typed. */
+  private static readonly PREFIX_MIN_LEN = 3;
+
+  /**
+   * Per-query result cache. Keyed by lowercase query and bounded, because it is
+   * static and therefore outlives the component: an unbounded Map would keep
+   * every track list of the whole session in memory.
+   */
   private static readonly queryPayloadCache = new Map<string, QueryPayload>();
 
   private static readonly PAGE_STEP = 15;
@@ -384,16 +395,30 @@ export class SearchComponent {
       return false;
     }
     const tab = this.activeTab();
+    // Not blocking while results are already on screen: the full-page skeleton
+    // would hide the rows we just restored from cache while the request for the
+    // longer query is still in flight.
     if (tab === 'tracks') {
-      return this.loadingTracks();
+      return this.loadingTracks() && this.tracks().length === 0;
     }
     if (tab === 'albums') {
-      return this.loadingAlbums();
+      return this.loadingAlbums() && this.albums().length === 0;
     }
     if (tab === 'artists') {
-      return this.loadingArtists();
+      return this.loadingArtists() && this.artists().length === 0;
     }
-    return this.loadingTracks() && this.loadingAlbums() && this.loadingArtists();
+    // The "All" tab is not blocking while anything has already arrived: the
+    // three requests land in parallel and each section paints as soon as it is
+    // ready, so blocking only on "still nothing at all" avoids a spinner over
+    // content that is already on screen.
+    return (
+      this.loadingTracks() &&
+      this.loadingAlbums() &&
+      this.loadingArtists() &&
+      this.tracks().length === 0 &&
+      this.albums().length === 0 &&
+      this.artists().length === 0
+    );
   });
 
   readonly rowCapForTab = computed(() => {
@@ -485,8 +510,12 @@ export class SearchComponent {
       this.lastRouteQuery = initialQ.trim();
     }
 
+    // Debounce scales with how much the user has typed. The first characters
+    // change on almost every keystroke and each one would cost a network
+    // round-trip, while a long query is usually a deliberate paste or a final
+    // correction that should go out immediately.
     const queryDebounced = this.query$.pipe(
-      debounceTime(150),
+      debounce((q) => timer(q.trim().length <= 3 ? 350 : 150)),
       map((q) => q.trim()),
       distinctUntilChanged(),
     );
@@ -495,7 +524,8 @@ export class SearchComponent {
       .pipe(
         switchMap(([q, tab]) => {
           const normalizedQ = q.trim();
-          const minLenForStructuredSearch = tab === 'albums' || tab === 'artists' || tab === 'all' ? 2 : 1;
+          const minLenForStructuredSearch =
+            tab === 'albums' || tab === 'artists' || tab === 'all' ? 2 : 1;
           if (normalizedQ.length > 0 && normalizedQ.length < minLenForStructuredSearch) {
             this.requestGen += 1;
             this.loadingTracks.set(false);
@@ -527,6 +557,16 @@ export class SearchComponent {
           const enc = encodeURIComponent(q);
           const cache = SearchComponent.getQueryCache(q);
 
+          // While the request for this exact query is in flight, show the
+          // results of the longest already-cached prefix. Typing "rih" then
+          // "rihanna" paints the "ri" result instantly instead of waiting for
+          // the network. The fresh response replaces it a moment later.
+          const staleTracks = SearchComponent.findCachedTracks(q);
+          if (staleTracks && tab === 'tracks') {
+            this.tracks.set(staleTracks);
+            this.visibleLimit.set(SearchComponent.INITIAL_TAB);
+          }
+
           const fin = (flag: 'tracks' | 'albums' | 'artists') => () => {
             if (gen === this.requestGen) {
               if (flag === 'tracks') {
@@ -539,7 +579,7 @@ export class SearchComponent {
             }
           };
 
-          const streams: Array<Observable<unknown>> = [];
+          const streams: Observable<unknown>[] = [];
 
           if (tab === 'all') {
             if (cache.tracks) {
@@ -623,7 +663,10 @@ export class SearchComponent {
             if (streams.length === 0) {
               return of(null);
             }
-            return concat(...streams);
+            // merge, not concat: concat would run the tracks, albums and
+            // artists requests one after another, so the "All" tab would take
+            // as long as the three round-trips added up instead of their max.
+            return merge(...streams);
           }
 
           if (tab === 'tracks') {
@@ -822,14 +865,54 @@ export class SearchComponent {
     this.visibleLimit.update((v) => Math.min(v + SearchComponent.PAGE_STEP, cap));
   }
 
+  /**
+   * Tracks of the longest cached query that is a prefix of `q`, or null.
+   *
+   * Used to paint something immediately while the real request is still in
+   * flight. Only queries at least {@link PREFIX_MIN_LEN} long qualify, so a
+   * two-letter cache entry never replaces a meaningful result set.
+   */
+  private static findCachedTracks(q: string): AppTrack[] | null {
+    const needle = q.trim().toLowerCase();
+    if (needle.length < SearchComponent.PREFIX_MIN_LEN) {
+      return null;
+    }
+    let best: AppTrack[] | null = null;
+    for (let len = needle.length - 1; len >= SearchComponent.PREFIX_MIN_LEN; len -= 1) {
+      const cached = SearchComponent.queryPayloadCache.get(needle.slice(0, len));
+      if (cached?.tracks?.length) {
+        best = cached.tracks;
+        break;
+      }
+    }
+    return best;
+  }
+
   private static getQueryCache(q: string): QueryPayload {
     const key = q.trim().toLowerCase();
-    let e = SearchComponent.queryPayloadCache.get(key);
-    if (!e) {
-      e = {};
-      SearchComponent.queryPayloadCache.set(key, e);
+    const existing = SearchComponent.queryPayloadCache.get(key);
+    if (existing) {
+      // Re-insert to mark it as most recently used.
+      SearchComponent.queryPayloadCache.delete(key);
+      SearchComponent.queryPayloadCache.set(key, existing);
+      return existing;
     }
-    return e;
+
+    const fresh: QueryPayload = {};
+    SearchComponent.queryPayloadCache.set(key, fresh);
+    const overflow = SearchComponent.queryPayloadCache.size - SearchComponent.QUERY_CACHE_LIMIT;
+    if (overflow > 0) {
+      // Map preserves insertion order, so the first key is the oldest.
+      const oldest = SearchComponent.queryPayloadCache.keys();
+      for (let i = 0; i < overflow; i += 1) {
+        const victim = oldest.next();
+        if (victim.done) {
+          break;
+        }
+        SearchComponent.queryPayloadCache.delete(victim.value);
+      }
+    }
+    return fresh;
   }
 
   setTab(id: SearchTab): void {

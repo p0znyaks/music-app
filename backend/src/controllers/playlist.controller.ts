@@ -1,53 +1,66 @@
-import { Request, Response } from 'express';
-import { In } from 'typeorm';
-import { AppDataSource } from '../services/dataSource';
-import { Playlist } from '../entities/playlist.entity';
-import { PlaylistTrack } from '../entities/playlist-track.entity';
-import { FavoriteTrack } from '../entities/favorite-track.entity';
-import { TrackTag } from '../entities/track-tag.entity';
-import { User } from '../entities/user.entity';
-import { Clip } from '../entities/clip.entity';
+import { Request, Response } from "express";
+import { AppDataSource } from "../services/dataSource";
+import { Playlist } from "../entities/playlist.entity";
+import { PlaylistTrack } from "../entities/playlist-track.entity";
+import { User } from "../entities/user.entity";
+import { completeTrackMedia } from "../services/track-media.service";
+import { clipShortCode, loadClipTimes } from "../services/tags/clip-times";
+import {
+  assessRemoval,
+  deleteTagsForTrack,
+  trackStillHasSource,
+} from "../services/library/track-lifecycle.service";
+import { routeId, routeParam, wantsForce } from "../http/params";
 
-function parsePlaylistId(raw: string | string[] | undefined): number | null {
-  if (raw === undefined) {
-    return null;
-  }
-  const s = Array.isArray(raw) ? raw[0] : raw;
-  if (typeof s !== 'string' || s === '') {
-    return null;
-  }
-  const n = parseInt(s, 10);
-  return Number.isFinite(n) ? n : null;
+/** Longest playlist name the API accepts. */
+const MAX_NAME_LENGTH = 25;
+
+type PlaylistTrackResponse = {
+  id: number;
+  trackId: string;
+  title: string;
+  artist: string;
+  thumbnailUrl: string | null;
+  duration: number | null;
+  addedAt: Date;
+  /** Present only for clip tracks. */
+  startTime?: number;
+  endTime?: number;
+};
+
+/** Finds a playlist owned by the caller, or null. */
+async function findOwnedPlaylist(
+  userId: number,
+  playlistId: number,
+): Promise<Playlist | null> {
+  return AppDataSource.getRepository(Playlist).findOne({
+    where: { id: playlistId, user: { id: userId } },
+  });
 }
 
-function paramTrackId(raw: string | string[] | undefined): string {
-  if (raw === undefined) {
-    return '';
-  }
-  const s = Array.isArray(raw) ? raw[0] : raw;
-  return typeof s === 'string' ? decodeURIComponent(s) : '';
-}
-
+/** POST /api/playlists */
 export async function createPlaylist(req: Request, res: Response) {
   const userId = req.user?.id;
-  if (userId === undefined) {
-    return res.status(401).json({ message: 'Unauthorized' });
-  }
+  if (userId === undefined)
+    return res.status(401).json({ message: "Unauthorized" });
 
   const name = req.body?.name;
-  if (typeof name !== 'string' || !name.trim()) {
-    return res.status(400).json({ message: 'name is required' });
+  if (typeof name !== "string" || !name.trim()) {
+    return res.status(400).json({ message: "name is required" });
   }
-  if (name.trim().length > 25) {
-    return res.status(400).json({ message: 'name must be at most 25 characters' });
+  if (name.trim().length > MAX_NAME_LENGTH) {
+    return res
+      .status(400)
+      .json({ message: `name must be at most ${MAX_NAME_LENGTH} characters` });
   }
 
-  const playlistRepo = AppDataSource.getRepository(Playlist);
-  const playlist = playlistRepo.create({
+  const repo = AppDataSource.getRepository(Playlist);
+  const playlist = repo.create({
     name: name.trim(),
     user: { id: userId } as User,
   });
-  await playlistRepo.save(playlist);
+  await repo.save(playlist);
+
   return res.status(201).json({
     id: playlist.id,
     name: playlist.name,
@@ -55,145 +68,121 @@ export async function createPlaylist(req: Request, res: Response) {
   });
 }
 
+/** DELETE /api/playlists/:id */
 export async function deletePlaylist(req: Request, res: Response) {
   const userId = req.user?.id;
-  if (userId === undefined) {
-    return res.status(401).json({ message: 'Unauthorized' });
-  }
+  if (userId === undefined)
+    return res.status(401).json({ message: "Unauthorized" });
 
-  const id = parsePlaylistId(req.params.id);
-  if (id === null) {
-    return res.status(400).json({ message: 'Invalid playlist id' });
-  }
+  const id = routeId(req.params.id);
+  if (id === null)
+    return res.status(400).json({ message: "Invalid playlist id" });
 
-  const playlistRepo = AppDataSource.getRepository(Playlist);
-  const playlist = await playlistRepo.findOne({
-    where: { id, user: { id: userId } },
-  });
-  if (!playlist) {
-    return res.status(404).json({ message: 'Playlist not found' });
-  }
+  const repo = AppDataSource.getRepository(Playlist);
+  const playlist = await findOwnedPlaylist(userId, id);
+  if (!playlist) return res.status(404).json({ message: "Playlist not found" });
 
-  // Postgres FK constraints: playlist_tracks must be removed first
-  const playlistTrackRepo = AppDataSource.getRepository(PlaylistTrack);
-  const rows = await playlistTrackRepo.find({
+  // Foreign keys require the child rows to go first.
+  const trackRepo = AppDataSource.getRepository(PlaylistTrack);
+  const rows = await trackRepo.find({
     where: { playlist: { id } },
     select: { trackId: true },
   });
-  const trackIds = [...new Set(rows.map((r) => r.trackId).filter((t) => typeof t === 'string' && t.trim().length > 0))];
+  await trackRepo.delete({ playlist: { id } });
+  await repo.remove(playlist);
 
-  await playlistTrackRepo.delete({ playlist: { id } });
-
-  await playlistRepo.remove(playlist);
-
-  // Cleanup tags for tracks that became "orphan" (not in any playlist and not in favorites).
-  if (trackIds.length > 0) {
-    const favRepo = AppDataSource.getRepository(FavoriteTrack);
-    const tagRepo = AppDataSource.getRepository(TrackTag);
-
-    for (const trackId of trackIds) {
-      const favExists = await favRepo.findOne({ where: { user: { id: userId }, trackId } });
-      if (favExists) {
-        continue;
-      }
-      const stillInAnyPlaylist = await playlistTrackRepo
-        .createQueryBuilder('pt')
-        .innerJoin('pt.playlist', 'p')
-        .where('p.user_id = :uid', { uid: userId })
-        .andWhere('pt.trackId = :tid', { tid: trackId })
-        .getExists();
-      if (!stillInAnyPlaylist) {
-        await tagRepo
-          .createQueryBuilder()
-          .delete()
-          .where('user_id = :uid', { uid: userId })
-          .andWhere('track_id = :tid', { tid: trackId })
-          .execute();
-      }
-    }
+  // A track only in this playlist is now an orphan, and its tags go with it.
+  const trackIds = [
+    ...new Set(rows.map((row) => (row.trackId ?? "").trim()).filter(Boolean)),
+  ];
+  for (const trackId of trackIds) {
+    if (await trackStillHasSource(userId, trackId)) continue;
+    await deleteTagsForTrack(userId, trackId);
   }
 
   return res.status(204).send();
 }
 
+/** GET /api/playlists */
 export async function listPlaylists(req: Request, res: Response) {
   const userId = req.user?.id;
-  if (userId === undefined) {
-    return res.status(401).json({ message: 'Unauthorized' });
-  }
+  if (userId === undefined)
+    return res.status(401).json({ message: "Unauthorized" });
 
-  const playlistRepo = AppDataSource.getRepository(Playlist);
-  const list = await playlistRepo.find({
+  const list = await AppDataSource.getRepository(Playlist).find({
     where: { user: { id: userId } },
-    order: { createdAt: 'DESC' },
+    order: { createdAt: "DESC" },
   });
+
   return res.json(
-    list.map((p) => ({
-      id: p.id,
-      name: p.name,
-      createdAt: p.createdAt,
+    list.map((playlist) => ({
+      id: playlist.id,
+      name: playlist.name,
+      createdAt: playlist.createdAt,
     })),
   );
 }
 
+/** POST /api/playlists/:id/tracks */
 export async function addPlaylistTrack(req: Request, res: Response) {
   const userId = req.user?.id;
-  if (userId === undefined) {
-    return res.status(401).json({ message: 'Unauthorized' });
+  if (userId === undefined)
+    return res.status(401).json({ message: "Unauthorized" });
+
+  const playlistId = routeId(req.params.id);
+  if (playlistId === null)
+    return res.status(400).json({ message: "Invalid playlist id" });
+
+  const { trackId, title, artist, thumbnailUrl, duration, isClip } =
+    req.body ?? {};
+  if (typeof trackId !== "string" || !trackId.trim()) {
+    return res.status(400).json({ message: "trackId is required" });
+  }
+  if (typeof title !== "string" || typeof artist !== "string") {
+    return res.status(400).json({ message: "title and artist are required" });
   }
 
-  const playlistId = parsePlaylistId(req.params.id);
-  if (playlistId === null) {
-    return res.status(400).json({ message: 'Invalid playlist id' });
-  }
+  const playlist = await findOwnedPlaylist(userId, playlistId);
+  if (!playlist) return res.status(404).json({ message: "Playlist not found" });
 
-  const body = req.body ?? {};
-  const { trackId, title, artist, thumbnailUrl, duration, isClip } = body;
-  if (typeof trackId !== 'string' || !trackId.trim()) {
-    return res.status(400).json({ message: 'trackId is required' });
-  }
-  if (typeof title !== 'string' || typeof artist !== 'string') {
-    return res.status(400).json({ message: 'title and artist are required' });
-  }
-
-  const playlistRepo = AppDataSource.getRepository(Playlist);
-  const playlist = await playlistRepo.findOne({
-    where: { id: playlistId, user: { id: userId } },
-  });
-  if (!playlist) {
-    return res.status(404).json({ message: 'Playlist not found' });
-  }
-
-  const playlistTrackRepo = AppDataSource.getRepository(PlaylistTrack);
+  const repo = AppDataSource.getRepository(PlaylistTrack);
   const normalizedTrackId = trackId.trim();
-  if (isClip === true) {
-    const normalizedTitle = title.trim().toLowerCase();
-    const existingClipName = await playlistTrackRepo
-      .createQueryBuilder('pt')
-      .where('pt.playlist_id = :playlistId', { playlistId })
-      .andWhere('LOWER(TRIM(pt.title)) = :normalizedTitle', { normalizedTitle })
-      .getExists();
-    if (existingClipName) {
-      return res.status(409).json({ message: 'Clip with this name already in playlist' });
-    }
-  } else {
-    const existing = await playlistTrackRepo.findOne({
-      where: { playlist: { id: playlistId }, trackId: normalizedTrackId },
+
+  // Clips are distinct cuts of the same track, so uniqueness is by name for
+  // them and by track id for ordinary tracks.
+  const duplicate =
+    isClip === true
+      ? await repo
+          .createQueryBuilder("pt")
+          .where("pt.playlist_id = :playlistId", { playlistId })
+          .andWhere("LOWER(TRIM(pt.title)) = :normalizedTitle", {
+            normalizedTitle: title.trim().toLowerCase(),
+          })
+          .getExists()
+      : (await repo.findOne({
+          where: { playlist: { id: playlistId }, trackId: normalizedTrackId },
+        })) !== null;
+
+  if (duplicate) {
+    return res.status(409).json({
+      message:
+        isClip === true
+          ? "Clip with this name already in playlist"
+          : "Track already in playlist",
     });
-    if (existing) {
-      return res.status(409).json({ message: 'Track already in playlist' });
-    }
   }
 
-  const row = playlistTrackRepo.create({
+  const media = await completeTrackMedia({ trackId, thumbnailUrl, duration });
+  const row = repo.create({
     playlist,
     trackId: normalizedTrackId,
     title,
     artist,
-    thumbnailUrl: typeof thumbnailUrl === 'string' ? thumbnailUrl : null,
-    duration: typeof duration === 'number' && Number.isFinite(duration) ? Math.floor(duration) : null,
+    thumbnailUrl: media.thumbnailUrl,
+    duration: media.duration,
   });
-  await playlistTrackRepo.save(row);
+  await repo.save(row);
+
   return res.status(201).json({
     id: row.id,
     trackId: row.trackId,
@@ -205,134 +194,88 @@ export async function addPlaylistTrack(req: Request, res: Response) {
   });
 }
 
+/** DELETE /api/playlists/:id/tracks/:trackId */
 export async function removePlaylistTrack(req: Request, res: Response) {
   const userId = req.user?.id;
-  if (userId === undefined) {
-    return res.status(401).json({ message: 'Unauthorized' });
-  }
+  if (userId === undefined)
+    return res.status(401).json({ message: "Unauthorized" });
 
-  const id = parsePlaylistId(req.params.id);
-  const trackId = paramTrackId(req.params.trackId);
-  if (id === null || !trackId) {
-    return res.status(400).json({ message: 'Invalid playlist or track id' });
-  }
+  const id = routeId(req.params.id);
+  const trackId = routeParam(req.params.trackId);
+  if (id === null || !trackId)
+    return res.status(400).json({ message: "Invalid playlist or track id" });
 
-  const force = (req.query as any)?.force === '1';
+  const force = wantsForce(req.query);
 
-  const playlistRepo = AppDataSource.getRepository(Playlist);
-  const playlist = await playlistRepo.findOne({
-    where: { id, user: { id: userId } },
+  const playlist = await findOwnedPlaylist(userId, id);
+  if (!playlist) return res.status(404).json({ message: "Playlist not found" });
+
+  const repo = AppDataSource.getRepository(PlaylistTrack);
+  const row = await repo.findOne({ where: { playlist: { id }, trackId } });
+  if (!row)
+    return res.status(404).json({ message: "Track not found in playlist" });
+
+  // Excluding this playlist, the track is orphaned only if nothing else holds it.
+  const impact = await assessRemoval(userId, trackId, {
+    excludePlaylistId: id,
   });
-  if (!playlist) {
-    return res.status(404).json({ message: 'Playlist not found' });
-  }
-
-  const trackRepo = AppDataSource.getRepository(PlaylistTrack);
-  const row = await trackRepo.findOne({
-    where: { playlist: { id }, trackId },
-  });
-  if (!row) {
-    return res.status(404).json({ message: 'Track not found in playlist' });
-  }
-
-  const tagRepo = AppDataSource.getRepository(TrackTag);
-  const tagCount = await tagRepo.count({ where: { user: { id: userId }, trackId } });
-
-  const favRepo = AppDataSource.getRepository(FavoriteTrack);
-  const favExists = await favRepo.findOne({ where: { user: { id: userId }, trackId } });
-
-  const otherPlaylistCount = await trackRepo
-    .createQueryBuilder('pt')
-    .innerJoin('pt.playlist', 'p')
-    .where('p.user_id = :uid', { uid: userId })
-    .andWhere('pt.trackId = :tid', { tid: trackId })
-    .andWhere('p.id != :pid', { pid: id })
-    .getCount();
-
-  const willHaveNoSources = !favExists && otherPlaylistCount === 0;
-  if (!force && tagCount > 0 && willHaveNoSources) {
+  if (!impact.stillReferenced && impact.tagCount > 0 && !force) {
     return res.status(409).json({
-      message: 'Track has tags. Confirmation required.',
+      message: "Track has tags. Confirmation required.",
       requiresConfirm: true,
       hasTags: true,
-      tagCount,
+      tagCount: impact.tagCount,
     });
   }
 
-  await trackRepo.remove(row);
+  await repo.remove(row);
 
-  if (willHaveNoSources) {
-    await tagRepo
-      .createQueryBuilder()
-      .delete()
-      .where('user_id = :uid', { uid: userId })
-      .andWhere('track_id = :tid', { tid: trackId })
-      .execute();
+  if (!impact.stillReferenced) {
+    await deleteTagsForTrack(userId, trackId);
   }
 
   return res.status(204).send();
 }
 
+/** GET /api/playlists/:id/tracks */
 export async function listPlaylistTracks(req: Request, res: Response) {
   const userId = req.user?.id;
-  if (userId === undefined) {
-    return res.status(401).json({ message: 'Unauthorized' });
-  }
+  if (userId === undefined)
+    return res.status(401).json({ message: "Unauthorized" });
 
-  const id = parsePlaylistId(req.params.id);
-  if (id === null) {
-    return res.status(400).json({ message: 'Invalid playlist id' });
-  }
+  const id = routeId(req.params.id);
+  if (id === null)
+    return res.status(400).json({ message: "Invalid playlist id" });
 
-  const playlistRepo = AppDataSource.getRepository(Playlist);
-  const playlist = await playlistRepo.findOne({
-    where: { id, user: { id: userId } },
-  });
-  if (!playlist) {
-    return res.status(404).json({ message: 'Playlist not found' });
-  }
+  const playlist = await findOwnedPlaylist(userId, id);
+  if (!playlist) return res.status(404).json({ message: "Playlist not found" });
 
-  const trackRepo = AppDataSource.getRepository(PlaylistTrack);
-  const tracks = await trackRepo.find({
+  const tracks = await AppDataSource.getRepository(PlaylistTrack).find({
     where: { playlist: { id } },
-    order: { addedAt: 'ASC' },
+    order: { addedAt: "ASC" },
   });
 
-  const clipShortCodes = tracks
-    .filter((t) => t.trackId.startsWith('clip:'))
-    .map((t) => t.trackId.slice(5));
-
-  const clipMap = new Map<string, { startTime: number; endTime: number }>();
-  if (clipShortCodes.length > 0) {
-    const clipRepo = AppDataSource.getRepository(Clip);
-    const clips = await clipRepo.find({
-      where: { shortCode: In(clipShortCodes) },
-    });
-    for (const c of clips) {
-      clipMap.set(c.shortCode, { startTime: c.startTime, endTime: c.endTime });
-    }
-  }
+  const clipTimes = await loadClipTimes(tracks.map((row) => row.trackId));
 
   return res.json(
-    tracks.map((t) => {
-      const base: any = {
-        id: t.id,
-        trackId: t.trackId,
-        title: t.title,
-        artist: t.artist,
-        thumbnailUrl: t.thumbnailUrl,
-        duration: t.duration,
-        addedAt: t.addedAt,
+    tracks.map((row) => {
+      const track: PlaylistTrackResponse = {
+        id: row.id,
+        trackId: row.trackId,
+        title: row.title,
+        artist: row.artist,
+        thumbnailUrl: row.thumbnailUrl,
+        duration: row.duration,
+        addedAt: row.addedAt,
       };
-      if (t.trackId.startsWith('clip:')) {
-        const sc = t.trackId.slice(5);
-        const clip = clipMap.get(sc);
-        if (clip) {
-          base.startTime = clip.startTime;
-          base.endTime = clip.endTime;
-        }
+
+      const shortCode = clipShortCode(row.trackId);
+      const clip = shortCode ? clipTimes.get(shortCode) : undefined;
+      if (clip) {
+        track.startTime = clip.startTime;
+        track.endTime = clip.endTime;
       }
-      return base;
+      return track;
     }),
   );
 }

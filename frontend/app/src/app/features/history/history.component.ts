@@ -6,12 +6,13 @@ import {
   ListenHistoryCacheService,
   type CachedListenHistoryRow,
 } from '../../core/services/listen-history-cache.service';
-import { PlayerService, type PlayerTrack } from '../../core/services/player.service';
+import type { PlayerTrack } from '../../core/services/player.service';
 import { AppTrack } from '../../shared/models/track.model';
 import { normalizeDurationSeconds } from '../../shared/utils/duration.util';
 import { TrackCardComponent } from '../../shared/components/track-card/track-card.component';
 import { TranslatePipe } from '../../shared/pipes/t.pipe';
 import { AppSettingsService } from '../../core/services/app-settings.service';
+import { IconComponent } from '../../shared/components/icon/icon.component';
 
 interface HistoryRow {
   id: number;
@@ -31,15 +32,12 @@ interface HistoryGroup {
 @Component({
   selector: 'app-history',
   standalone: true,
-  imports: [CommonModule, FormsModule, TrackCardComponent, TranslatePipe],
+  imports: [CommonModule, FormsModule, TrackCardComponent, TranslatePipe, IconComponent],
   template: `
     <div class="page">
       <h1>{{ 'historyTitle' | t }}</h1>
       <div class="search-box">
-        <svg class="lens" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <circle cx="11" cy="11" r="7" />
-          <path d="M21 21l-4.35-4.35" stroke-linecap="round" />
-        </svg>
+        <app-icon class="lens" name="search" />
         <input
           type="search"
           [(ngModel)]="inputModel"
@@ -59,7 +57,11 @@ interface HistoryGroup {
                 <h2>{{ group.title }}</h2>
                 <div class="group">
                   @for (row of group.rows; track row.id) {
-                    <app-track-card [track]="toTrack(row)" [queue]="queueTracks()" queueSource="history" />
+                    <app-track-card
+                      [track]="toTrack(row)"
+                      [queue]="queueTracks()"
+                      queueSource="history"
+                    />
                   }
                 </div>
               </section>
@@ -160,7 +162,9 @@ export class HistoryComponent {
 
   readonly filteredRows = computed(() => this.applyQueryFilter(this.rows(), this.query()));
   readonly groupedRows = computed<HistoryGroup[]>(() => this.buildGroups(this.filteredRows()));
-  readonly queueTracks = computed<PlayerTrack[]>(() => this.rows().map((row) => this.toPlayerTrack(row)));
+  readonly queueTracks = computed<PlayerTrack[]>(() =>
+    this.rows().map((row) => this.toPlayerTrack(row)),
+  );
 
   constructor() {
     this.api.get<CachedListenHistoryRow[]>('history').subscribe({
@@ -230,7 +234,7 @@ export class HistoryComponent {
 
   private dedupeByTrackId(rows: HistoryRow[]): HistoryRow[] {
     const map = new Map<string, HistoryRow>();
-    
+
     for (const row of rows) {
       const existing = map.get(row.trackId);
       if (!existing) {
@@ -244,8 +248,9 @@ export class HistoryComponent {
       }
     }
 
-    return Array.from(map.values())
-      .sort((a, b) => new Date(b.listenedAt).getTime() - new Date(a.listenedAt).getTime());
+    return Array.from(map.values()).sort(
+      (a, b) => new Date(b.listenedAt).getTime() - new Date(a.listenedAt).getTime(),
+    );
   }
 
   private getPeriodTitle(date: Date): string {
@@ -293,12 +298,6 @@ export class HistoryComponent {
     }
 
     return b.localeCompare(a);
-  }
-
-  private toDateKey(date: Date): string {
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
-      date.getDate(),
-    ).padStart(2, '0')}`;
   }
 
   private startOfDay(date: Date): Date {
