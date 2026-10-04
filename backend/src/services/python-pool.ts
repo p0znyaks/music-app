@@ -1,30 +1,60 @@
 import { randomUUID } from 'crypto';
 import { spawn, type ChildProcess } from 'child_process';
 import path from 'path';
+import { createLogger } from '../logger';
+import { envIntOrZero } from '../env';
 
 export type PythonWorkerAction =
   | 'ping'
   | 'search_albums'
   | 'search_artists'
   | 'search_songs'
-  | 'search_tracks'
   | 'get_album'
   | 'get_artist'
   | 'get_watch_playlist_radio'
   | 'get_song'
-  | 'ytdlp_flat'
-  | 'ytdlp_flat_rows'
-  | 'search_bundle_stream'
+  | 'get_player_stream'
+  | 'search_bundle'
   | 'reco_radio_batch'
   | 'reco_albums_batch';
+
+/**
+ * Per-action budget for a worker command.
+ *
+ * The worker answers on a single stdin/stdout pipe, so one stuck command also
+ * stalls everything queued behind it in that slot. Every action therefore gets
+ * a deadline close to what it can realistically need (InnerTube itself is
+ * budgeted at 1.6s), and a slot whose command overruns is recycled instead of
+ * being allowed to hold the queue for minutes.
+ */
+const DEFAULT_CMD_TIMEOUT_MS = 15_000;
+const ACTION_TIMEOUT_MS: Partial<Record<PythonWorkerAction, number>> = {
+  ping: 5_000,
+  search_bundle: 12_000,
+  search_songs: 12_000,
+  search_albums: 12_000,
+  search_artists: 12_000,
+  get_song: 10_000,
+  get_player_stream: 10_000,
+  get_album: 10_000,
+  get_artist: 12_000,
+  get_watch_playlist_radio: 15_000,
+  reco_radio_batch: 20_000,
+  reco_albums_batch: 20_000,
+};
+
+function timeoutForAction(action: PythonWorkerAction): number {
+  const override = envIntOrZero('PYTHON_CMD_TIMEOUT_MS', 0);
+  if (override > 0) {
+    return override;
+  }
+  return ACTION_TIMEOUT_MS[action] ?? DEFAULT_CMD_TIMEOUT_MS;
+}
 
 interface PoolResponseOk {
   id: string;
   ok: true;
   data: unknown;
-  seq?: number;
-  stream?: boolean;
-  done?: boolean;
 }
 
 interface PoolResponseErr {
@@ -37,21 +67,10 @@ interface PoolResponseErr {
 type PoolResponse = PoolResponseOk | PoolResponseErr;
 
 type Pending = {
-  onPartial?: (chunk: unknown) => void;
   resolve: (value: unknown) => void;
   reject: (err: Error) => void;
   timeout: ReturnType<typeof setTimeout>;
-  stream: boolean;
 };
-
-function envInt(name: string, fallback: number): number {
-  const raw = process.env[name];
-  if (!raw) {
-    return fallback;
-  }
-  const n = Number.parseInt(raw, 10);
-  return Number.isFinite(n) && n >= 0 ? n : fallback;
-}
 
 function workerScriptPath(): string {
   return path.join(process.cwd(), 'scripts', 'ytmusic_worker.py');
@@ -80,14 +99,14 @@ class PythonWorkerSlot {
       }
     });
     child.on('error', (err) => {
-      console.error('[python-pool] worker spawn error:', err);
+      log.error('worker spawn error:', err);
     });
     child.on('close', (code) => {
       if (this.child === child) {
         this.child = null;
       }
       if (code !== 0 && code !== null) {
-        console.warn(`[python-pool] worker exited code=${code}`);
+        log.warn(`worker exited code=${code}`);
       }
       this.rejectAllPending(new Error(`python worker closed (code=${code})`));
     });
@@ -155,17 +174,6 @@ class PythonWorkerSlot {
       }
 
       const ok = parsed as PoolResponseOk;
-      if (ok.stream) {
-        pending.onPartial?.(ok.data);
-        if (ok.done) {
-          clearTimeout(pending.timeout);
-          this.pendingById.delete(id);
-          this.inflightCount = Math.max(0, this.inflightCount - 1);
-          pending.resolve(ok.data);
-        }
-        continue;
-      }
-
       clearTimeout(pending.timeout);
       this.pendingById.delete(id);
       this.inflightCount = Math.max(0, this.inflightCount - 1);
@@ -174,31 +182,22 @@ class PythonWorkerSlot {
   }
 
   async call<T>(action: PythonWorkerAction, args: Record<string, unknown> = {}): Promise<T> {
+    // Retrying helps with a brief blip, but three full deadlines in a row would
+    // let a stuck upstream hold the caller for minutes. The retry loop is
+    // therefore bounded by one overall budget instead of three per-attempt ones.
+    const budgetMs = timeoutForAction(action);
+    const overallDeadline = Date.now() + budgetMs * 2;
     let lastErr: unknown;
     for (let attempt = 0; attempt < 3; attempt++) {
-      const id = randomUUID();
-      const payload = `${JSON.stringify({ id, action, args })}\n`;
-      try {
-        const child = this.ensureChild();
-        return await this.writeAndWaitResponse<T>(child, id, payload, false);
-      } catch (e) {
-        lastErr = e;
-        this.killChild();
-        this.stdoutBuf = '';
+      const remaining = overallDeadline - Date.now();
+      if (remaining <= 0) {
+        break;
       }
-    }
-    throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
-  }
-
-  async callStream(action: PythonWorkerAction, args: Record<string, unknown>, onPartial: (chunk: unknown) => void): Promise<void> {
-    let lastErr: unknown;
-    for (let attempt = 0; attempt < 3; attempt++) {
       const id = randomUUID();
       const payload = `${JSON.stringify({ id, action, args })}\n`;
       try {
         const child = this.ensureChild();
-        await this.writeAndWaitResponse<unknown>(child, id, payload, true, onPartial);
-        return;
+        return await this.writeAndWaitResponse<T>(child, id, payload, action, remaining);
       } catch (e) {
         lastErr = e;
         this.killChild();
@@ -223,8 +222,8 @@ class PythonWorkerSlot {
     child: ChildProcess,
     expectedId: string,
     payload: string,
-    stream: boolean,
-    onPartial?: (chunk: unknown) => void,
+    action: PythonWorkerAction,
+    deadlineMs: number,
   ): Promise<T> {
     return new Promise((resolve, reject) => {
       const stdin = child.stdin;
@@ -233,17 +232,17 @@ class PythonWorkerSlot {
         return;
       }
 
+      const budgetMs = deadlineMs;
       const timeout = setTimeout(() => {
-        this.pendingById.delete(expectedId);
-        this.inflightCount = Math.max(0, this.inflightCount - 1);
+        // A stuck command leaves the worker unable to answer anything queued
+        // behind it, so this slot's other commands are failed right away
+        // instead of each burning their own deadline.
+        this.rejectAllPending(new Error(`python worker: ${action} exceeded ${budgetMs}ms`));
         this.killChild();
         this.stdoutBuf = '';
-        reject(new Error('python worker: timeout'));
-      }, 120_000);
+      }, budgetMs);
 
       const pending: Pending = {
-        stream,
-        onPartial,
         resolve: (v: unknown) => {
           clearTimeout(timeout);
           resolve(v as T);
@@ -300,40 +299,33 @@ export class PythonPool {
     return slot.call<T>(action, args);
   }
 
-  async callStream(action: PythonWorkerAction, args: Record<string, unknown>, onPartial: (chunk: unknown) => void): Promise<void> {
-    const slot = this.pickSlot();
-    return slot.callStream(action, args, onPartial);
-  }
-
   async pingAll(): Promise<void> {
     await Promise.all(this.slots.map((s) => s.call<string>('ping', {})));
   }
 }
+
+const log = createLogger('python-pool');
 
 export function getPythonPool(): PythonPool | null {
   return globalPool;
 }
 
 export async function startPythonPool(): Promise<boolean> {
-  const n = envInt('PYTHON_WORKERS', 1);
+  const n = envIntOrZero('PYTHON_WORKERS', 2);
   if (n <= 0) {
     globalPool = null;
-    console.log('[python-pool] disabled (PYTHON_WORKERS=0)');
+    log.info('disabled (PYTHON_WORKERS=0)');
     return false;
   }
   try {
     const scriptPath = workerScriptPath();
     globalPool = new PythonPool(n, scriptPath);
     await globalPool.pingAll();
-    console.log(`[python-pool] started with ${n} workers`);
+    log.info(`started with ${n} workers`);
     return true;
   } catch (e) {
-    console.error('[python-pool] failed to start:', e);
+    log.error('failed to start:', e);
     globalPool = null;
     return false;
   }
-}
-
-export function stopPythonPool(): void {
-  globalPool = null;
 }

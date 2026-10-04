@@ -7,7 +7,7 @@ export class BackNavigationService {
   private readonly location = inject(Location);
   private readonly router = inject(Router);
 
-  back(fallbackUrl: string = '/'): void {
+  back(fallbackUrl = '/'): void {
     const sectionBackUrl = this.resolveSectionBackUrl();
     if (sectionBackUrl) {
       void this.router.navigateByUrl(sectionBackUrl);

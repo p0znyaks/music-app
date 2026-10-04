@@ -14,7 +14,6 @@ const { mockYtMusicService, mockYtdlpService } = vi.hoisted(() => {
   };
   const mockYtdlpService = {
     search: vi.fn(),
-    searchStreaming: vi.fn(),
   };
   return { mockYtMusicService, mockYtdlpService };
 });
@@ -46,7 +45,9 @@ beforeEach(() => {
 });
 
 describe('GET /api/search/albums', () => {
-  beforeEach(() => { vi.clearAllMocks(); });
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
   it('returns 400 when q is missing', async () => {
     const app = makeApp();
@@ -63,7 +64,9 @@ describe('GET /api/search/albums', () => {
   });
 
   it('returns albums from ytmusicService', async () => {
-    mockYtMusicService.searchAlbums.mockResolvedValue([{ browseId: 'album1', title: 'Great Album' }]);
+    mockYtMusicService.searchAlbums.mockResolvedValue([
+      { browseId: 'album1', title: 'Great Album' },
+    ]);
     const app = makeApp();
     const res = await request(app).get('/api/search/albums').query({ q: 'rock' });
     expect(res.status).toBe(200);
@@ -72,12 +75,14 @@ describe('GET /api/search/albums', () => {
     expect(mockYtMusicService.searchAlbums).toHaveBeenCalledWith('rock');
   });
 
-  it('returns 502 when ytmusicService throws', async () => {
+  it('answers with an empty list when the upstream fails', async () => {
     mockYtMusicService.searchAlbums.mockRejectedValue(new Error('fail'));
     const app = makeApp();
     const res = await request(app).get('/api/search/albums').query({ q: 'rock' });
-    expect(res.status).toBe(502);
-    expect(res.body.message).toBe('Album search failed');
+    // A failed request would blank the client's search screen; an empty result
+    // keeps it usable and lets the user retry.
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([]);
   });
 
   it('sets Cache-Control header', async () => {
@@ -89,7 +94,9 @@ describe('GET /api/search/albums', () => {
 });
 
 describe('GET /api/search/artists', () => {
-  beforeEach(() => { vi.clearAllMocks(); });
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
   it('returns 400 when q is missing', async () => {
     const app = makeApp();
@@ -98,7 +105,9 @@ describe('GET /api/search/artists', () => {
   });
 
   it('returns artists from ytmusicService', async () => {
-    mockYtMusicService.searchArtists.mockResolvedValue([{ browseId: 'artist1', artist: 'Cool Band' }]);
+    mockYtMusicService.searchArtists.mockResolvedValue([
+      { browseId: 'artist1', artist: 'Cool Band' },
+    ]);
     const app = makeApp();
     const res = await request(app).get('/api/search/artists').query({ q: 'rock' });
     expect(res.status).toBe(200);
@@ -106,17 +115,19 @@ describe('GET /api/search/artists', () => {
     expect(res.body[0].artist).toBe('Cool Band');
   });
 
-  it('returns 502 when ytmusicService throws', async () => {
+  it('answers with an empty list when the upstream fails', async () => {
     mockYtMusicService.searchArtists.mockRejectedValue(new Error('fail'));
     const app = makeApp();
     const res = await request(app).get('/api/search/artists').query({ q: 'pop' });
-    expect(res.status).toBe(502);
-    expect(res.body.message).toBe('Artist search failed');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([]);
   });
 });
 
 describe('GET /api/albums/:browseId', () => {
-  beforeEach(() => { vi.clearAllMocks(); });
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
   it('returns 400 when browseId is empty', async () => {
     const app = makeApp();
@@ -125,7 +136,10 @@ describe('GET /api/albums/:browseId', () => {
   });
 
   it('returns album data', async () => {
-    mockYtMusicService.getAlbum.mockResolvedValue({ browseId: 'album123', title: 'My Album' });
+    mockYtMusicService.getAlbum.mockResolvedValue({
+      browseId: 'album123',
+      title: 'My Album',
+    });
     const app = makeApp();
     const res = await request(app).get('/api/albums/album123');
     expect(res.status).toBe(200);
@@ -140,17 +154,19 @@ describe('GET /api/albums/:browseId', () => {
     expect(res.body.message).toBe('Album not found');
   });
 
-  it('returns 502 on error', async () => {
+  it('reports 503 on error', async () => {
     mockYtMusicService.getAlbum.mockRejectedValue(new Error('fail'));
     const app = makeApp();
     const res = await request(app).get('/api/albums/album123');
-    expect(res.status).toBe(502);
-    expect(res.body.message).toBe('Failed to load album');
+    // 503 rather than 404: the album exists, the upstream is what is down.
+    expect(res.status).toBe(503);
   });
 });
 
 describe('GET /api/artists/:browseId', () => {
-  beforeEach(() => { vi.clearAllMocks(); });
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
   it('returns 400 when browseId is empty', async () => {
     const app = makeApp();
@@ -159,7 +175,10 @@ describe('GET /api/artists/:browseId', () => {
   });
 
   it('returns artist data', async () => {
-    mockYtMusicService.getArtist.mockResolvedValue({ browseId: 'artist123', name: 'Cool Band' });
+    mockYtMusicService.getArtist.mockResolvedValue({
+      browseId: 'artist123',
+      name: 'Cool Band',
+    });
     const app = makeApp();
     const res = await request(app).get('/api/artists/artist123');
     expect(res.status).toBe(200);
@@ -176,7 +195,9 @@ describe('GET /api/artists/:browseId', () => {
 });
 
 describe('GET /api/search - main search', () => {
-  beforeEach(() => { vi.clearAllMocks(); });
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
   it('returns 400 when q is missing', async () => {
     const app = makeApp();
@@ -207,11 +228,11 @@ describe('GET /api/search - main search', () => {
     expect(res.body.albums).toBeDefined();
   });
 
-  it('returns 502 on ytdlpService error (JSON)', async () => {
+  it('answers with an empty bundle when every upstream fails', async () => {
     mockYtdlpService.search.mockRejectedValue(new Error('fail'));
     const app = makeApp();
     const res = await request(app).get('/api/search').query({ q: 'rock' });
-    expect(res.status).toBe(502);
-    expect(res.body.message).toBe('Search failed');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ tracks: [], albums: [], artists: [] });
   });
 });

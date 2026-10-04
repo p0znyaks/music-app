@@ -3,16 +3,9 @@ import { Request, Response } from 'express';
 import { AppDataSource } from '../services/dataSource';
 import { Clip } from '../entities/clip.entity';
 import { User } from '../entities/user.entity';
-import { getProxyStream } from './track.controller';
+import { streamTrack } from '../services/audio-stream.service';
+import { routeParam } from '../http/params';
 import { ytdlpService } from '../services/ytdlp.service';
-
-function paramShortCode(raw: string | string[] | undefined): string {
-  if (raw === undefined) {
-    return '';
-  }
-  const s = Array.isArray(raw) ? raw[0] : raw;
-  return typeof s === 'string' ? s : '';
-}
 
 export async function createClip(req: Request, res: Response) {
   const userId = req.user?.id;
@@ -33,7 +26,12 @@ export async function createClip(req: Request, res: Response) {
   if (typeof clipName !== 'string' || !clipName.trim()) {
     return res.status(400).json({ message: 'clipName is required' });
   }
-  if (typeof startTime !== 'number' || typeof endTime !== 'number' || !Number.isFinite(startTime) || !Number.isFinite(endTime)) {
+  if (
+    typeof startTime !== 'number' ||
+    typeof endTime !== 'number' ||
+    !Number.isFinite(startTime) ||
+    !Number.isFinite(endTime)
+  ) {
     return res.status(400).json({ message: 'startTime and endTime must be numbers (seconds)' });
   }
   if (endTime <= startTime) {
@@ -54,7 +52,8 @@ export async function createClip(req: Request, res: Response) {
       trackId: trackId.trim(),
       title: clipName.trim(),
       artist,
-      thumbnailUrl: typeof thumbnailUrl === 'string' && thumbnailUrl.trim() ? thumbnailUrl : '/clip-cover.svg',
+      thumbnailUrl:
+        typeof thumbnailUrl === 'string' && thumbnailUrl.trim() ? thumbnailUrl : '/clip-cover.svg',
       startTime: Math.floor(startTime),
       endTime: Math.floor(endTime),
       shortCode,
@@ -82,7 +81,7 @@ export async function createClip(req: Request, res: Response) {
 }
 
 export async function getClipByShortCode(req: Request, res: Response) {
-  const shortCode = paramShortCode(req.params.shortCode);
+  const shortCode = routeParam(req.params.shortCode);
   if (!shortCode) {
     return res.status(400).json({ message: 'shortCode is required' });
   }
@@ -114,7 +113,7 @@ export async function getClipByShortCode(req: Request, res: Response) {
 }
 
 export async function proxyClipByShortCode(req: Request, res: Response) {
-  const shortCode = paramShortCode(req.params.shortCode);
+  const shortCode = routeParam(req.params.shortCode);
   if (!shortCode) {
     return res.status(400).json({ message: 'shortCode is required' });
   }
@@ -125,6 +124,7 @@ export async function proxyClipByShortCode(req: Request, res: Response) {
     return res.status(404).json({ message: 'Clip not found' });
   }
 
-  req.params.trackId = clip.trackId;
-  return getProxyStream(req, res);
+  // The clip points at the original video; the player streams it from the same
+  // start offset it already knows from `clip.startTime`.
+  return streamTrack(req, res, clip.trackId);
 }

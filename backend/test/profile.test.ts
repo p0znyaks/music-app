@@ -7,12 +7,17 @@ import { profileRouter } from '../src/routes/profile.routes';
 process.env.JWT_SECRET = 'test-secret-key-for-tests';
 process.env.PYTHON_WORKERS = '0';
 
-const mockRoleRepo = { findOne: vi.fn().mockResolvedValue({ id: 2, name: 'user' }) };
+const mockRoleRepo = {
+  findOne: vi.fn().mockResolvedValue({ id: 2, name: 'user' }),
+};
 
 const defaultUserRepo = {
   findOne: vi.fn().mockResolvedValue({
-    id: 1, username: 'testuser', email: 'test@test.com',
-    role: { name: 'user' }, createdAt: new Date('2024-01-01'),
+    id: 1,
+    username: 'testuser',
+    email: 'test@test.com',
+    role: { name: 'user' },
+    createdAt: new Date('2024-01-01'),
   }),
 };
 const defaultHistoryRepo = { count: vi.fn().mockResolvedValue(10) };
@@ -33,7 +38,9 @@ vi.mock('../src/services/dataSource', () => ({
 }));
 
 function token(userId = 1, email = 'test@test.com', role = 'user') {
-  return jwt.sign({ id: userId, email, role }, 'test-secret-key-for-tests', { expiresIn: '7d' });
+  return jwt.sign({ id: userId, email, role }, 'test-secret-key-for-tests', {
+    expiresIn: '7d',
+  });
 }
 
 function makeApp() {
@@ -63,7 +70,11 @@ describe('GET /api/profile - getProfile', () => {
 
   it('returns 401 with expired token', async () => {
     const app = makeApp();
-    const expired = jwt.sign({ id: 1, email: 'a@b.com', role: 'user' }, 'test-secret-key-for-tests', { expiresIn: '-1s' });
+    const expired = jwt.sign(
+      { id: 1, email: 'a@b.com', role: 'user' },
+      'test-secret-key-for-tests',
+      { expiresIn: '-1s' },
+    );
     const res = await request(app).get('/api/profile').set('Authorization', `Bearer ${expired}`);
     expect(res.status).toBe(401);
   });
@@ -80,8 +91,11 @@ describe('GET /api/profile - getProfile', () => {
 
   it('returns 200 with valid token and profile data', async () => {
     defaultUserRepo.findOne.mockResolvedValue({
-      id: 1, username: 'testuser', email: 'test@test.com',
-      role: { name: 'user' }, createdAt: new Date('2024-01-01'),
+      id: 1,
+      username: 'testuser',
+      email: 'test@test.com',
+      role: { name: 'user' },
+      createdAt: new Date('2024-01-01'),
     });
     defaultHistoryRepo.count.mockResolvedValue(10);
     defaultPlaylistRepo.count.mockResolvedValue(5);
@@ -93,8 +107,11 @@ describe('GET /api/profile - getProfile', () => {
 
   it('query access_token works as fallback', async () => {
     defaultUserRepo.findOne.mockResolvedValue({
-      id: 1, username: 'testuser', email: 'test@test.com',
-      role: { name: 'user' }, createdAt: new Date('2024-01-01'),
+      id: 1,
+      username: 'testuser',
+      email: 'test@test.com',
+      role: { name: 'user' },
+      createdAt: new Date('2024-01-01'),
     });
     defaultHistoryRepo.count.mockResolvedValue(10);
     defaultPlaylistRepo.count.mockResolvedValue(5);
@@ -107,8 +124,11 @@ describe('GET /api/profile - getProfile', () => {
 
   it('profile includes createdAt', async () => {
     defaultUserRepo.findOne.mockResolvedValue({
-      id: 1, username: 'testuser', email: 'test@test.com',
-      role: { name: 'user' }, createdAt: new Date('2024-01-01'),
+      id: 1,
+      username: 'testuser',
+      email: 'test@test.com',
+      role: { name: 'user' },
+      createdAt: new Date('2024-01-01'),
     });
     const app = makeApp();
     const res = await request(app).get('/api/profile').set('Authorization', `Bearer ${token()}`);
@@ -117,8 +137,11 @@ describe('GET /api/profile - getProfile', () => {
 
   it('Bearer takes priority over query token', async () => {
     defaultUserRepo.findOne.mockResolvedValue({
-      id: 1, username: 'bearer-user', email: 'bearer@test.com',
-      role: { name: 'user' }, createdAt: new Date('2024-01-01'),
+      id: 1,
+      username: 'bearer-user',
+      email: 'bearer@test.com',
+      role: { name: 'user' },
+      createdAt: new Date('2024-01-01'),
     });
     defaultHistoryRepo.count.mockResolvedValue(10);
     defaultPlaylistRepo.count.mockResolvedValue(5);

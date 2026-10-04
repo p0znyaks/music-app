@@ -57,6 +57,15 @@ export class PlayerService {
     }
   }
 
+  /** Whether `next()` would advance to another queue item. */
+  hasNext(): boolean {
+    const q = this.queue$.value;
+    if (q.length === 0) {
+      return false;
+    }
+    return this.resolveQueueIndex(q) + 1 < q.length;
+  }
+
   next(): void {
     const q = this.queue$.value;
     if (q.length === 0) {

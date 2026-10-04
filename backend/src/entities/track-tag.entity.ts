@@ -29,6 +29,9 @@ export class TrackTag {
   @Column({ name: 'thumbnail_url', type: 'varchar', nullable: true })
   thumbnailUrl: string | null;
 
+  @Column({ type: 'integer', nullable: true })
+  duration: number | null;
+
   @Column({ type: 'varchar' })
   tag: string;
 

@@ -1,0 +1,20 @@
+# The nginx build context is the repository root, so everything here is shipped
+# to the daemon on every build unless excluded. Only the frontend sources and the
+# nginx config are actually copied into the image; node_modules alone was 189 MB.
+**/node_modules
+**/dist
+**/coverage
+**/.angular
+**/.git
+**/.cache
+
+# Secrets and local state must never enter a build context.
+.env
+.env.*
+cookies.txt
+*.pem
+dump.sql
+
+# Not used by any stage.
+docs/
+backend/

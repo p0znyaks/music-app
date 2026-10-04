@@ -7,22 +7,28 @@ import { AlbumCardComponent } from '../../shared/components/album-card/album-car
 import type { ArtistDetailDto, YtmAlbumCard } from '../search/search.model';
 import { TranslatePipe } from '../../shared/pipes/t.pipe';
 import { AppSettingsService } from '../../core/services/app-settings.service';
+import { EmptyStateComponent } from '../../shared/components/empty-state/empty-state.component';
+import { SkeletonComponent } from '../../shared/components/skeleton/skeleton.component';
 
 @Component({
   selector: 'app-artist',
   standalone: true,
-  imports: [CommonModule, AlbumCardComponent, TranslatePipe],
+  imports: [
+    CommonModule,
+    AlbumCardComponent,
+    TranslatePipe,
+    EmptyStateComponent,
+    SkeletonComponent,
+  ],
   template: `
     <div class="page">
       @if (error()) {
-        <p class="err">{{ error() }}</p>
+        <p class="error-text">{{ error() }}</p>
         <button type="button" class="back tap" (click)="back()">← {{ 'back' | t }}</button>
       } @else if (loading()) {
-        <div class="skel skel-hero"></div>
+        <app-skeleton variant="hero" />
         <div class="skel-list">
-          @for (i of [0, 1, 2, 3]; track i) {
-            <div class="skel skel-row"></div>
-          }
+          <app-skeleton [count]="4" />
         </div>
       } @else if (detail(); as d) {
         <button type="button" class="back tap" (click)="back()">← {{ 'back' | t }}</button>
@@ -53,7 +59,7 @@ import { AppSettingsService } from '../../core/services/app-settings.service';
           }
         </div>
         @if (d.albums.length === 0) {
-          <p class="empty">{{ 'noAlbumsFound' | t }}</p>
+          <app-empty-state titleKey="noAlbumsFound" />
         }
       }
     </div>
@@ -122,41 +128,11 @@ import { AppSettingsService } from '../../core/services/app-settings.service';
       flex-direction: column;
       gap: 8px;
     }
-    .empty {
-      color: var(--accent-dim);
-      font-size: 0.9rem;
-    }
-    .err {
-      color: #c44;
-      margin-bottom: 1rem;
-    }
-    .skel {
-      border-radius: 10px;
-      background: var(--bg-card);
-      animation: pulse 1.2s ease-in-out infinite;
-    }
-    .skel-hero {
-      height: 120px;
-      max-width: 360px;
-      border-radius: 60px;
-    }
     .skel-list {
       margin-top: 1.25rem;
       display: flex;
       flex-direction: column;
       gap: 8px;
-    }
-    .skel-row {
-      height: 64px;
-    }
-    @keyframes pulse {
-      0%,
-      100% {
-        opacity: 0.55;
-      }
-      50% {
-        opacity: 0.9;
-      }
     }
   `,
 })

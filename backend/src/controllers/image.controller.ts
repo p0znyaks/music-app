@@ -1,5 +1,8 @@
 import { Request, Response } from 'express';
+import { createLogger } from '../logger';
 import { getProxiedImage, normalizeExternalImageUrl } from '../services/image-proxy.service';
+
+const log = createLogger('image');
 
 export async function proxyImage(req: Request, res: Response) {
   const raw = req.query.u;
@@ -20,7 +23,7 @@ export async function proxyImage(req: Request, res: Response) {
     res.setHeader('Cache-Control', 'public, max-age=2592000, immutable');
     return res.status(200).send(result.body);
   } catch (err) {
-    console.error(err);
+    log.error(err);
     return res.status(502).json({ message: 'Image proxy failed' });
   }
 }

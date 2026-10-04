@@ -5,31 +5,58 @@ import { NavigationEnd, type Params, Router } from '@angular/router';
 import { filter } from 'rxjs';
 import { AuthService } from '../../../core/services/auth.service';
 import { TranslatePipe } from '../../pipes/t.pipe';
+import { IconComponent } from '../../../shared/components/icon/icon.component';
 
 @Component({
   selector: 'app-navbar',
   standalone: true,
-  imports: [AsyncPipe, TranslatePipe],
+  imports: [AsyncPipe, TranslatePipe, IconComponent],
   template: `
     <aside class="sidebar">
       <a href="" class="logo" (click)="onLogoClick($event)">Muze</a>
 
       <nav class="nav">
-        <a href="" class="nav-link" [class.active]="isSectionActive('search')" (click)="onSearchClick($event)">
-          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <circle cx="11" cy="11" r="7" />
-            <path d="M21 21l-4.35-4.35" stroke-linecap="round" />
-          </svg>
+        <a
+          href=""
+          class="nav-link"
+          [class.active]="isSectionActive('search')"
+          (click)="onSearchClick($event)"
+        >
+          <app-icon class="ico" name="search" />
           {{ 'search' | t }}
         </a>
-        <a href="" [class.active]="isSectionActive('playlists')" class="nav-link" (click)="onSectionClick($event, 'playlists')">
-          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <a
+          href=""
+          [class.active]="isSectionActive('playlists')"
+          class="nav-link"
+          (click)="onSectionClick($event, 'playlists')"
+        >
+          <svg
+            class="ico"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            aria-hidden="true"
+          >
             <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" stroke-linecap="round" />
           </svg>
           {{ 'playlists' | t }}
         </a>
-        <a href="" [class.active]="isSectionActive('favorites')" class="nav-link" (click)="onSectionClick($event, 'favorites')">
-          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <a
+          href=""
+          [class.active]="isSectionActive('favorites')"
+          class="nav-link"
+          (click)="onSectionClick($event, 'favorites')"
+        >
+          <svg
+            class="ico"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            aria-hidden="true"
+          >
             <path
               d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
               stroke-linejoin="round"
@@ -37,15 +64,39 @@ import { TranslatePipe } from '../../pipes/t.pipe';
           </svg>
           {{ 'favorites' | t }}
         </a>
-        <a href="" [class.active]="isSectionActive('history')" class="nav-link" (click)="onSectionClick($event, 'history')">
-          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <a
+          href=""
+          [class.active]="isSectionActive('history')"
+          class="nav-link"
+          (click)="onSectionClick($event, 'history')"
+        >
+          <svg
+            class="ico"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            aria-hidden="true"
+          >
             <path d="M12 8v4l3 2M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z" stroke-linecap="round" />
             <path d="M12 6V2L8 6" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
           {{ 'history' | t }}
         </a>
-        <a href="" [class.active]="isSectionActive('mood')" class="nav-link" (click)="onSectionClick($event, 'mood')">
-          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <a
+          href=""
+          [class.active]="isSectionActive('mood')"
+          class="nav-link"
+          (click)="onSectionClick($event, 'mood')"
+        >
+          <svg
+            class="ico"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            aria-hidden="true"
+          >
             <circle cx="12" cy="12" r="3" />
             <path
               d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"
@@ -54,16 +105,40 @@ import { TranslatePipe } from '../../pipes/t.pipe';
           </svg>
           {{ 'tags' | t }}
         </a>
-        <a href="" [class.active]="isSectionActive('personal-mix')" class="nav-link" (click)="onSectionClick($event, 'personal-mix')">
-          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <path d="M9 18V5l12-2v13" stroke-linecap="round" stroke-linejoin="round"/>
-            <circle cx="6" cy="18" r="3"/>
-            <circle cx="18" cy="16" r="3"/>
+        <a
+          href=""
+          [class.active]="isSectionActive('personal-mix')"
+          class="nav-link"
+          (click)="onSectionClick($event, 'personal-mix')"
+        >
+          <svg
+            class="ico"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            aria-hidden="true"
+          >
+            <path d="M9 18V5l12-2v13" stroke-linecap="round" stroke-linejoin="round" />
+            <circle cx="6" cy="18" r="3" />
+            <circle cx="18" cy="16" r="3" />
           </svg>
           {{ 'personalMix' | t }}
         </a>
-        <a href="" [class.active]="isSectionActive('profile')" class="nav-link" (click)="onSectionClick($event, 'profile')">
-          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <a
+          href=""
+          [class.active]="isSectionActive('profile')"
+          class="nav-link"
+          (click)="onSectionClick($event, 'profile')"
+        >
+          <svg
+            class="ico"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            aria-hidden="true"
+          >
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke-linecap="round" />
             <circle cx="12" cy="7" r="4" />
           </svg>
@@ -178,7 +253,10 @@ export class NavbarComponent {
   get searchQueryParams(): Params {
     const q = (sessionStorage.getItem('search.query') ?? '').trim();
     const tabRaw = (sessionStorage.getItem('search.tab') ?? '').trim();
-    const tab = tabRaw === 'tracks' || tabRaw === 'albums' || tabRaw === 'artists' || tabRaw === 'all' ? tabRaw : '';
+    const tab =
+      tabRaw === 'tracks' || tabRaw === 'albums' || tabRaw === 'artists' || tabRaw === 'all'
+        ? tabRaw
+        : '';
 
     const params: Params = {};
     if (q) {
@@ -201,7 +279,10 @@ export class NavbarComponent {
         if (!section) {
           return;
         }
-        sessionStorage.setItem(`${NavbarComponent.SECTION_STORAGE_PREFIX}${section}`, e.urlAfterRedirects);
+        sessionStorage.setItem(
+          `${NavbarComponent.SECTION_STORAGE_PREFIX}${section}`,
+          e.urlAfterRedirects,
+        );
       });
   }
 
@@ -232,7 +313,9 @@ export class NavbarComponent {
   }
 
   private openSection(section: NavSection): void {
-    const storedUrl = (sessionStorage.getItem(`${NavbarComponent.SECTION_STORAGE_PREFIX}${section}`) ?? '').trim();
+    const storedUrl = (
+      sessionStorage.getItem(`${NavbarComponent.SECTION_STORAGE_PREFIX}${section}`) ?? ''
+    ).trim();
     const sectionBackUrl = this.resolveSectionBackUrl(section);
     if (storedUrl) {
       void this.router.navigateByUrl(storedUrl, { state: { sectionBackUrl } });
@@ -279,4 +362,5 @@ export class NavbarComponent {
   }
 }
 
-type NavSection = 'search' | 'playlists' | 'favorites' | 'history' | 'mood' | 'personal-mix' | 'profile';
+type NavSection =
+  'search' | 'playlists' | 'favorites' | 'history' | 'mood' | 'personal-mix' | 'profile';

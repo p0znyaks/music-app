@@ -1,3 +1,4 @@
+import { AsyncSemaphore } from '../env';
 import { getRedis } from './redis';
 
 const IMAGE_PROXY_PREFIX = '/api/images/proxy?u=';
@@ -67,7 +68,11 @@ function buildGoogleImageCandidates(rawUrl: string): string[] {
 
   const hostVariants = ['yt3.googleusercontent.com', 'lh3.googleusercontent.com'];
   const currentHost = parsed.hostname.toLowerCase();
-  if (currentHost === 'yt3.ggpht.com' || currentHost === 'yt3.googleusercontent.com' || currentHost === 'lh3.googleusercontent.com') {
+  if (
+    currentHost === 'yt3.ggpht.com' ||
+    currentHost === 'yt3.googleusercontent.com' ||
+    currentHost === 'lh3.googleusercontent.com'
+  ) {
     const existing = [...candidates];
     for (const host of hostVariants) {
       for (const candidate of existing) {
@@ -112,7 +117,7 @@ export function normalizeExternalImageUrl(input: string): string | null {
   return rewriteGoogleImageUrl(parsed);
 }
 
-export function toImageProxyUrl(input: string): string {
+function toImageProxyUrl(input: string): string {
   if (input.startsWith(IMAGE_PROXY_PREFIX)) {
     return input;
   }
@@ -152,105 +157,89 @@ export function rewriteImageUrlsDeep<T>(value: T): T {
   return walk(value as JsonLike) as T;
 }
 
-class AsyncSemaphore {
-  private readonly queue: Array<() => void> = [];
-  private active = 0;
-
-  constructor(private readonly max: number) {}
-
-  async use<T>(fn: () => Promise<T>): Promise<T> {
-    await this.acquire();
-    try {
-      return await fn();
-    } finally {
-      this.release();
-    }
-  }
-
-  private acquire(): Promise<void> {
-    if (this.active < this.max) {
-      this.active += 1;
-      return Promise.resolve();
-    }
-    return new Promise((resolve) => {
-      this.queue.push(() => {
-        this.active += 1;
-        resolve();
-      });
-    });
-  }
-
-  private release(): void {
-    this.active = Math.max(0, this.active - 1);
-    const next = this.queue.shift();
-    if (next) next();
-  }
-}
-
 const imageFetchLimiter = new AsyncSemaphore(MAX_CONCURRENCY);
 const inflight = new Map<string, Promise<{ status: number; contentType: string; body: Buffer }>>();
 
-async function fetchImageWithRetry(url: string): Promise<{ status: number; contentType: string; body: Buffer }> {
+async function fetchImageWithRetry(
+  url: string,
+): Promise<{ status: number; contentType: string; body: Buffer }> {
   const candidateUrls = buildGoogleImageCandidates(url);
 
   for (const candidateUrl of candidateUrls) {
-  let attempt = 0;
-  while (true) {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-      const resp = await fetch(candidateUrl, {
-        headers: {
-          Accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.9,ru;q=0.8',
-          'User-Agent': 'Mozilla/5.0 (compatible; MusicAppImageProxy/1.0)',
-          Referer: 'https://music.youtube.com/',
-        },
-        signal: controller.signal,
-      }).finally(() => clearTimeout(timeout));
+    let attempt = 0;
+    while (true) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+        const resp = await fetch(candidateUrl, {
+          headers: {
+            Accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9,ru;q=0.8',
+            'User-Agent': 'Mozilla/5.0 (compatible; MusicAppImageProxy/1.0)',
+            Referer: 'https://music.youtube.com/',
+          },
+          signal: controller.signal,
+        }).finally(() => clearTimeout(timeout));
 
-      if (resp.ok) {
-        const arr = await resp.arrayBuffer();
-        const contentType = resp.headers.get('content-type') ?? 'image/jpeg';
-        return { status: 200, contentType, body: Buffer.from(arr) };
-      }
+        if (resp.ok) {
+          const arr = await resp.arrayBuffer();
+          const contentType = resp.headers.get('content-type') ?? 'image/jpeg';
+          return { status: 200, contentType, body: Buffer.from(arr) };
+        }
 
-      if ((resp.status === 429 || resp.status >= 500) && attempt < MAX_RETRIES) {
-        attempt += 1;
-        const delay = Math.min(400 * 2 ** attempt, 3000);
-        await sleep(delay);
-        continue;
-      }
+        if ((resp.status === 429 || resp.status >= 500) && attempt < MAX_RETRIES) {
+          attempt += 1;
+          const delay = Math.min(400 * 2 ** attempt, 3000);
+          await sleep(delay);
+          continue;
+        }
 
-      return {
-        status: resp.status,
-        contentType: 'text/plain; charset=utf-8',
-        body: Buffer.from('Image fetch failed'),
-      };
-    } catch {
-      if (attempt < MAX_RETRIES) {
-        attempt += 1;
-        const delay = Math.min(400 * 2 ** attempt, 3000);
-        await sleep(delay);
-        continue;
+        return {
+          status: resp.status,
+          contentType: 'text/plain; charset=utf-8',
+          body: Buffer.from('Image fetch failed'),
+        };
+      } catch {
+        if (attempt < MAX_RETRIES) {
+          attempt += 1;
+          const delay = Math.min(400 * 2 ** attempt, 3000);
+          await sleep(delay);
+          continue;
+        }
+        return {
+          status: 502,
+          contentType: 'text/plain; charset=utf-8',
+          body: Buffer.from('Image fetch failed'),
+        };
       }
-      return { status: 502, contentType: 'text/plain; charset=utf-8', body: Buffer.from('Image fetch failed') };
     }
   }
-  }
-  return { status: 502, contentType: 'text/plain; charset=utf-8', body: Buffer.from('Image fetch failed') };
+  return {
+    status: 502,
+    contentType: 'text/plain; charset=utf-8',
+    body: Buffer.from('Image fetch failed'),
+  };
 }
 
-export async function getProxiedImage(url: string): Promise<{ status: number; contentType: string; body: Buffer }> {
+export async function getProxiedImage(
+  url: string,
+): Promise<{ status: number; contentType: string; body: Buffer }> {
   const key = `img:proxy:v1:${url}`;
   const redis = getRedis();
   try {
     const cached = await redis.get(key);
     if (cached) {
       try {
-        const parsed = JSON.parse(cached) as { contentType: string; base64: string };
+        const parsed = JSON.parse(cached) as {
+          contentType: string;
+          base64: string;
+        };
         if (typeof parsed.contentType === 'string' && typeof parsed.base64 === 'string') {
-          return { status: 200, contentType: parsed.contentType, body: Buffer.from(parsed.base64, 'base64') };
+          return {
+            status: 200,
+            contentType: parsed.contentType,
+            body: Buffer.from(parsed.base64, 'base64'),
+          };
         }
       } catch {
         // Cache corruption is non-fatal.
@@ -269,7 +258,10 @@ export async function getProxiedImage(url: string): Promise<{ status: number; co
     const fetched = await fetchImageWithRetry(url);
     if (fetched.status === 200) {
       try {
-        const payload = JSON.stringify({ contentType: fetched.contentType, base64: fetched.body.toString('base64') });
+        const payload = JSON.stringify({
+          contentType: fetched.contentType,
+          base64: fetched.body.toString('base64'),
+        });
         await redis.set(key, payload, 'EX', IMAGE_CACHE_TTL_SEC);
       } catch {
         // Redis failures should not break image proxying.

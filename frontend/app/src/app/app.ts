@@ -19,7 +19,9 @@ export class App {
   private readonly auth = inject(AuthService);
   private readonly player = inject(PlayerService);
   private readonly router = inject(Router);
-  protected readonly user = toSignal(this.auth.currentUser$, { initialValue: this.auth.currentUser$.value });
+  protected readonly user = toSignal(this.auth.currentUser$, {
+    initialValue: this.auth.currentUser$.value,
+  });
   protected readonly playerTrack = toSignal(this.player.currentTrack$, { initialValue: null });
 
   private readonly isClipRoute$ = this.router.events.pipe(
@@ -27,5 +29,7 @@ export class App {
     map(() => this.router.url.startsWith('/clip/')),
     startWith(this.router.url.startsWith('/clip/')),
   );
-  protected readonly isClipRoute = toSignal(this.isClipRoute$, { initialValue: this.router.url.startsWith('/clip/') });
+  protected readonly isClipRoute = toSignal(this.isClipRoute$, {
+    initialValue: this.router.url.startsWith('/clip/'),
+  });
 }

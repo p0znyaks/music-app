@@ -1,6 +1,16 @@
 import { CommonModule } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, computed, effect, ElementRef, HostListener, inject, signal, viewChild, viewChildren } from '@angular/core';
+import {
+  Component,
+  computed,
+  effect,
+  ElementRef,
+  HostListener,
+  inject,
+  signal,
+  viewChild,
+  viewChildren,
+} from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { NavigationEnd, Router, RouterLink } from '@angular/router';
@@ -9,24 +19,32 @@ import { ApiService } from '../../core/services/api.service';
 import { ArtistLookupService } from '../../core/services/artist-lookup.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ListenHistoryCacheService } from '../../core/services/listen-history-cache.service';
-import { PlayerService, type PlayerTrack, type QueueSource } from '../../core/services/player.service';
+import {
+  PlayerService,
+  type PlayerTrack,
+  type QueueSource,
+} from '../../core/services/player.service';
+import { IconComponent } from '../../shared/components/icon/icon.component';
+import { ThumbComponent } from '../../shared/components/thumb/thumb.component';
 import { formatDurationClock, normalizeDurationSeconds } from '../../shared/utils/duration.util';
 import { ModalComponent } from '../../shared/components/modal/modal.component';
 import { TranslatePipe } from '../../shared/pipes/t.pipe';
 import { AppSettingsService } from '../../core/services/app-settings.service';
 import { ToastService } from '../../core/services/toast.service';
-
-interface PlaylistRow {
-  id: number;
-  name: string;
-  trackCount: number;
-  preview: { kind: 'mosaic'; urls: string[] } | { kind: 'single'; url: string | null };
-}
+import { buildPlaylistPreview, type PlaylistRow } from '../../shared/utils/playlist-preview.util';
 
 @Component({
   selector: 'app-player',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, RouterLink, TranslatePipe],
+  imports: [
+    CommonModule,
+    FormsModule,
+    ModalComponent,
+    RouterLink,
+    TranslatePipe,
+    ThumbComponent,
+    IconComponent,
+  ],
   template: `
     <audio
       #audioRef
@@ -47,40 +65,55 @@ interface PlaylistRow {
           <div class="player-bar">
             <div class="zone left">
               <div class="thumb-wrap">
-                @if (t.thumbnailUrl) {
-                  <img [src]="t.thumbnailUrl" [alt]="t.title" width="72" height="72" />
-                } @else {
-                  <div class="thumb-ph"></div>
-                }
+                <app-thumb [src]="t.thumbnailUrl" [alt]="t.title" [size]="72" />
               </div>
               <div class="meta">
                 <div class="t-title">{{ t.title }}</div>
                 <div class="t-artist-row">
-                  <button type="button" class="t-artist" (click)="openArtist(t.artist)">{{ t.artist }}</button>
+                  <button
+                    type="button"
+                    class="t-artist"
+                    (click)="artistLookup.openArtist(t.artist)"
+                  >
+                    {{ t.artist }}
+                  </button>
                   <span class="t-dur">{{ formatTime(displayDur()) }}</span>
                 </div>
               </div>
             </div>
 
             <div class="zone center" (click)="onCenterZoneClick($event)">
-              <div class="drag-zone" (mousedown)="onDragStart($event)" aria-label="Drag to open queue">
+              <div
+                class="drag-zone"
+                (mousedown)="onDragStart($event)"
+                aria-label="Drag to open queue"
+              >
                 <div class="drag-pill"></div>
               </div>
               <div class="btns">
-                <button type="button" class="ctrl tap" (click)="player.prev()" aria-label="Previous">
-                  <svg class="ico-prev" viewBox="0 0 16 16" fill="currentColor"><path d="M11 12V4l-6 4 6 4zM4 4v8h1V4H4z"/></svg>
+                <button
+                  type="button"
+                  class="ctrl tap"
+                  (click)="player.prev()"
+                  aria-label="Previous"
+                >
+                  <svg class="ico-prev" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M11 12V4l-6 4 6 4zM4 4v8h1V4H4z" />
+                  </svg>
                 </button>
                 @if (playing()) {
                   <button type="button" class="ctrl main tap" (click)="pause()" aria-label="Pause">
-                    <svg class="ico-play" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="5" height="16" rx="1"/><rect x="13" y="4" width="5" height="16" rx="1"/></svg>
+                    <app-icon class="ico-play" name="pause" />
                   </button>
                 } @else {
                   <button type="button" class="ctrl main tap" (click)="resume()" aria-label="Play">
-                    <svg class="ico-play" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7-11-7z"/></svg>
+                    <app-icon class="ico-play" name="play" [size]="24" />
                   </button>
                 }
                 <button type="button" class="ctrl tap" (click)="player.next()" aria-label="Next">
-                  <svg class="ico-prev" viewBox="0 0 16 16" fill="currentColor"><path d="M5 4v8l6-4-6-4zm6 0v8h1V4h-1z"/></svg>
+                  <svg class="ico-prev" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M5 4v8l6-4-6-4zm6 0v8h1V4h-1z" />
+                  </svg>
                 </button>
               </div>
               <div class="progress-row">
@@ -97,8 +130,26 @@ interface PlaylistRow {
 
             <div class="zone right">
               @if (!isClipTrack()) {
-                <button type="button" class="clip-btn tap" (click)="openClip()" aria-label="Create clip">
-                  <svg class="ico-clip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="20" y1="20" x2="8.12" y2="8.12"/></svg>
+                <button
+                  type="button"
+                  class="clip-btn tap"
+                  (click)="openClip()"
+                  aria-label="Create clip"
+                >
+                  <svg
+                    class="ico-clip"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <circle cx="6" cy="6" r="3" />
+                    <circle cx="6" cy="18" r="3" />
+                    <line x1="20" y1="4" x2="8.12" y2="15.88" />
+                    <line x1="20" y1="20" x2="8.12" y2="8.12" />
+                  </svg>
                 </button>
               }
             </div>
@@ -124,25 +175,31 @@ interface PlaylistRow {
                     title="Reorder"
                     aria-label="Reorder in queue"
                   >
-                    <svg class="grip-svg" viewBox="0 0 12 20" aria-hidden="true" fill="currentColor">
-                      <circle cx="3.5" cy="4.5" r="1.2" /><circle cx="8.5" cy="4.5" r="1.2" />
-                      <circle cx="3.5" cy="10.5" r="1.2" /><circle cx="8.5" cy="10.5" r="1.2" />
-                      <circle cx="3.5" cy="16.5" r="1.2" /><circle cx="8.5" cy="16.5" r="1.2" />
+                    <svg
+                      class="grip-svg"
+                      viewBox="0 0 12 20"
+                      aria-hidden="true"
+                      fill="currentColor"
+                    >
+                      <circle cx="3.5" cy="4.5" r="1.2" />
+                      <circle cx="8.5" cy="4.5" r="1.2" />
+                      <circle cx="3.5" cy="10.5" r="1.2" />
+                      <circle cx="8.5" cy="10.5" r="1.2" />
+                      <circle cx="3.5" cy="16.5" r="1.2" />
+                      <circle cx="8.5" cy="16.5" r="1.2" />
                     </svg>
                   </button>
                   <button type="button" class="queue-row" (click)="playFromQueue(q)">
                     <div class="queue-thumb">
-                      @if (q.thumbnailUrl) {
-                        <img [src]="q.thumbnailUrl" [alt]="q.title" />
-                      } @else {
-                        <div class="queue-thumb-ph"></div>
-                      }
+                      <app-thumb [src]="q.thumbnailUrl" [alt]="q.title" variant="queue" />
                     </div>
                     <div class="queue-meta">
                       <div class="queue-title">
                         {{ q.title }}
                         @if (q.trackId === t.trackId && playing()) {
-                          <div class="eq" aria-hidden="true"><span></span><span></span><span></span></div>
+                          <div class="eq" aria-hidden="true">
+                            <span></span><span></span><span></span>
+                          </div>
                         }
                       </div>
                       <div class="queue-artist-row">
@@ -163,7 +220,10 @@ interface PlaylistRow {
 
     <app-modal [title]="'createClip' | t" [isOpen]="clipOpen()" (closed)="closeClip()">
       @if (track(); as t) {
-        <p class="clip-preview">{{ formatTime(clipStart()) }} — {{ formatTime(clipEnd()) }} · {{ formatTime(Math.max(0, clipEnd() - clipStart())) }}</p>
+        <p class="clip-preview">
+          {{ formatTime(clipStart()) }} — {{ formatTime(clipEnd()) }} ·
+          {{ formatTime(Math.max(0, clipEnd() - clipStart())) }}
+        </p>
         <label class="rng-lab">
           <span>{{ 'clipName' | t }}</span>
           <input
@@ -197,12 +257,14 @@ interface PlaylistRow {
           />
         </label>
         @if (clipError()) {
-          <p class="err">{{ clipError() }}</p>
+          <p class="error-text err">{{ clipError() }}</p>
         }
         @if (clipResult(); as cr) {
           <p class="ok">{{ 'clipReady' | t }}</p>
           <a class="link" [routerLink]="['/clip', cr]">Open /clip/{{ cr }}</a>
-          <button type="button" class="copy tap" (click)="copyClip(cr)">{{ 'copyLink' | t }}</button>
+          <button type="button" class="copy tap" (click)="copyClip(cr)">
+            {{ 'copyLink' | t }}
+          </button>
           <div class="pl-create">
             <input
               type="text"
@@ -211,7 +273,12 @@ interface PlaylistRow {
               [placeholder]="'newPlaylistNamePlaceholder' | t"
               (keydown.enter)="createPlaylistAndAddClip()"
             />
-            <button type="button" class="pl-create-btn tap" [disabled]="creatingPlaylist() || !newPlaylistName.trim()" (click)="createPlaylistAndAddClip()">
+            <button
+              type="button"
+              class="pl-create-btn tap"
+              [disabled]="creatingPlaylist() || !newPlaylistName.trim()"
+              (click)="createPlaylistAndAddClip()"
+            >
               {{ 'create' | t }}
             </button>
           </div>
@@ -251,7 +318,9 @@ interface PlaylistRow {
           <button type="button" class="copy tap" [disabled]="clipSaving()" (click)="previewClip()">
             {{ clipPreviewPlaying() ? ('pause' | t) : ('previewClip' | t) }}
           </button>
-          <button type="button" class="create tap" [disabled]="clipSaving()" (click)="createClip()">{{ 'create' | t }}</button>
+          <button type="button" class="create tap" [disabled]="clipSaving()" (click)="createClip()">
+            {{ 'create' | t }}
+          </button>
         }
       }
     </app-modal>
@@ -334,7 +403,7 @@ interface PlaylistRow {
       min-width: 0;
       height: 100%;
     }
-.left {
+    .left {
       gap: 14px;
       padding-left: 24px;
       min-width: 0;
@@ -366,7 +435,6 @@ interface PlaylistRow {
     .thumb-ph {
       width: 72px;
       height: 72px;
-      background: var(--border);
     }
     .meta {
       min-width: 0;
@@ -459,7 +527,9 @@ interface PlaylistRow {
       align-items: center;
       justify-content: center;
       color: var(--accent);
-      transition: transform 0.12s ease, opacity 0.2s ease;
+      transition:
+        transform 0.12s ease,
+        opacity 0.2s ease;
     }
     .ctrl:hover {
       opacity: 0.85;
@@ -597,7 +667,9 @@ interface PlaylistRow {
       display: grid;
       place-items: center;
       cursor: grab;
-      transition: background 0.22s ease, color 0.22s ease;
+      transition:
+        background 0.22s ease,
+        color 0.22s ease;
     }
     .queue-grip:hover {
       background: var(--overlay-panel-bg-strong);
@@ -646,12 +718,6 @@ interface PlaylistRow {
       background: var(--bg-hover);
     }
     .queue-thumb img,
-    .queue-thumb-ph {
-      width: 44px;
-      height: 44px;
-      display: block;
-      object-fit: cover;
-    }
     .queue-meta {
       min-width: 0;
       flex: 1;
@@ -726,7 +792,7 @@ interface PlaylistRow {
         opacity: 1;
       }
     }
-.clip-btn {
+    .clip-btn {
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -737,7 +803,10 @@ interface PlaylistRow {
       cursor: pointer;
       color: var(--accent-dim);
       font-size: 14px;
-      transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+      transition:
+        color 0.2s ease,
+        border-color 0.2s ease,
+        background 0.2s ease;
     }
     .clip-btn:hover:not(:disabled) {
       color: var(--accent);
@@ -751,18 +820,10 @@ interface PlaylistRow {
     .clip-btn.tap:active:not(:disabled) {
       transform: scale(0.95);
     }
-    .clip-label {
-      font-size: 13px;
-      color: var(--accent-dim);
-      transition: color 0.2s ease;
-    }
     .clip-btn:hover:not(:disabled) {
       color: var(--accent);
       border-color: var(--accent-dim);
       background: var(--overlay-panel-bg-strong);
-    }
-    .clip-btn:hover:not(:disabled) .clip-label {
-      color: var(--accent);
     }
     .clip-btn:disabled {
       opacity: 0.4;
@@ -808,9 +869,7 @@ interface PlaylistRow {
       border: 1px solid var(--border);
     }
     .err {
-      color: #e5534b;
-      font-size: 13px;
-      margin-top: 8px;
+      margin-top: var(--sp-2);
     }
     .ok {
       color: var(--accent-dim);
@@ -938,7 +997,7 @@ interface PlaylistRow {
 export class PlayerComponent {
   readonly player = inject(PlayerService);
   private readonly api = inject(ApiService);
-  private readonly artistLookup = inject(ArtistLookupService);
+  readonly artistLookup = inject(ArtistLookupService);
   private readonly auth = inject(AuthService);
   private readonly listenHistoryCache = inject(ListenHistoryCacheService);
   private readonly router = inject(Router);
@@ -951,7 +1010,9 @@ export class PlayerComponent {
   readonly track = toSignal(this.player.currentTrack$, { initialValue: null });
   readonly playing = toSignal(this.player.isPlaying$, { initialValue: false });
   readonly queue = toSignal(this.player.queue$, { initialValue: [] as PlayerTrack[] });
-  readonly queueSource = toSignal(this.player.queueSource$, { initialValue: 'unknown' as QueueSource});
+  readonly queueSource = toSignal(this.player.queueSource$, {
+    initialValue: 'unknown' as QueueSource,
+  });
 
   readonly progress = signal(0);
   readonly currentSec = signal(0);
@@ -964,7 +1025,6 @@ export class PlayerComponent {
   readonly queueReorderTrackId = signal<string | null>(null);
 
   private clipEnforceTimer: ReturnType<typeof setInterval> | null = null;
-  private lastClipTrackId: string | null = null;
   private pendingClipStartTime: number | null = null;
 
   readonly sheetTransform = computed(() => {
@@ -1007,17 +1067,15 @@ export class PlayerComponent {
   protected readonly Math = Math;
 
   private historyLoggedFor: string | null = null;
-  private queueFromHistory = false;
   private dragStartY = 0;
   private dragStartExpanded = false;
   private suppressToggleUntil = 0;
 
-constructor() {
+  constructor() {
     effect(() => {
       const t = this.track();
       const ref = this.audioRef();
       this.historyLoggedFor = null;
-      this.lastClipTrackId = null;
       if (this.clipEnforceTimer) {
         clearInterval(this.clipEnforceTimer);
         this.clipEnforceTimer = null;
@@ -1029,9 +1087,13 @@ constructor() {
       this.player.setProgressPercent(0);
       this.progress.set(0);
       this.currentSec.set(0);
-      const isClip = t?.trackId.startsWith('clip:') && typeof t.startTime === 'number' && typeof t.endTime === 'number';
-      const hasStartTime = typeof t?.startTime === 'number';
-      this.totalSec.set(t && isClip ? t.endTime! - t.startTime! : (normalizeDurationSeconds(t?.duration) ?? 0));
+      const isClip =
+        t?.trackId.startsWith('clip:') &&
+        typeof t.startTime === 'number' &&
+        typeof t.endTime === 'number';
+      this.totalSec.set(
+        t && isClip ? t.endTime! - t.startTime! : (normalizeDurationSeconds(t?.duration) ?? 0),
+      );
       el.pause();
       el.src = '';
       el.oncanplay = null;
@@ -1084,7 +1146,7 @@ constructor() {
         }, 200);
       }
 
-      el.onerror = () => this.player.pause();
+      el.onerror = () => this.handlePlaybackError(t);
     });
 
     effect(() => {
@@ -1113,11 +1175,13 @@ constructor() {
       }
     });
 
-    this.router.events.pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd)).subscribe(() => {
-      if (this.isExpanded()) {
-        this.closeQueueSheet();
-      }
-    });
+    this.router.events
+      .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
+      .subscribe(() => {
+        if (this.isExpanded()) {
+          this.closeQueueSheet();
+        }
+      });
   }
 
   @HostListener('window:keydown', ['$event'])
@@ -1129,7 +1193,8 @@ constructor() {
     const isSpace = ev.code === 'Space' || ev.key === ' ';
     if (!isSpace) return;
 
-    const target = ev.target as (EventTarget & { tagName?: string; isContentEditable?: boolean }) | null;
+    const target = ev.target as
+      (EventTarget & { tagName?: string; isContentEditable?: boolean }) | null;
     const tag = target?.tagName?.toUpperCase();
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target?.isContentEditable) {
       return;
@@ -1292,12 +1357,15 @@ constructor() {
     const el = ref.nativeElement;
     if (!el.duration || !isFinite(el.duration)) return;
     const t = this.track();
-    const isClip = t?.trackId.startsWith('clip:') && typeof t.startTime === 'number' && typeof t.endTime === 'number';
-    
+    const isClip =
+      t?.trackId.startsWith('clip:') &&
+      typeof t.startTime === 'number' &&
+      typeof t.endTime === 'number';
+
     let pct: number;
     let curSec: number;
     let totSec: number;
-    
+
     if (isClip && t && typeof t.startTime === 'number' && typeof t.endTime === 'number') {
       const clipDur = t.endTime - t.startTime;
       curSec = el.currentTime - t.startTime;
@@ -1309,7 +1377,7 @@ constructor() {
       curSec = el.currentTime;
       totSec = el.duration;
     }
-    
+
     this.player.setProgressPercent(pct);
     this.progress.set(pct);
     this.currentSec.set(curSec);
@@ -1327,7 +1395,10 @@ constructor() {
     if (!ref) return;
     const el = ref.nativeElement;
     const t = this.track();
-    const isClip = t?.trackId.startsWith('clip:') && typeof t.startTime === 'number' && typeof t.endTime === 'number';
+    const isClip =
+      t?.trackId.startsWith('clip:') &&
+      typeof t.startTime === 'number' &&
+      typeof t.endTime === 'number';
     if (t && isClip) {
       this.totalSec.set(t.endTime! - t.startTime!);
     } else if (isFinite(el.duration) && el.duration > 0) {
@@ -1339,12 +1410,36 @@ constructor() {
     this.player.next();
   }
 
+  /**
+   * A track that will not play (region lock, removed video, expired URL) used
+   * to leave the player paused with no feedback, so it looked stuck forever.
+   * Report it and move on to the next queue item; if there is nothing left,
+   * just stop.
+   */
+  private handlePlaybackError(track: PlayerTrack | null): void {
+    const el = this.audioRef()?.nativeElement;
+    el?.pause();
+
+    const hasNext = this.player.hasNext();
+
+    if (track && !track.trackId.startsWith('clip:')) {
+      this.toast.show(this.settings.t('trackUnavailable'));
+    }
+
+    if (hasNext) {
+      this.player.next();
+      return;
+    }
+
+    this.player.pause();
+  }
+
   onAudioPlay(): void {
     const t = this.track();
     if (!t || this.historyLoggedFor === t.trackId) return;
     if (t.trackId.startsWith('clip:')) return;
     this.historyLoggedFor = t.trackId;
-    
+
     if (!t.duration && t.trackId && !t.trackId.startsWith('clip:')) {
       this.api.get<{ duration: number }>(`tracks/${t.trackId}/meta`).subscribe({
         next: (meta) => {
@@ -1356,7 +1451,7 @@ constructor() {
         error: () => {},
       });
     }
-    
+
     this.listenHistoryCache.record({
       trackId: t.trackId,
       title: t.title,
@@ -1382,7 +1477,12 @@ constructor() {
   resume(): void {
     const t = this.track();
     const ref = this.audioRef();
-    if (ref && t?.trackId.startsWith('clip:') && typeof t.startTime === 'number' && typeof t.endTime === 'number') {
+    if (
+      ref &&
+      t?.trackId.startsWith('clip:') &&
+      typeof t.startTime === 'number' &&
+      typeof t.endTime === 'number'
+    ) {
       const el = ref.nativeElement;
       if (el.ended || el.currentTime >= t.endTime!) {
         el.currentTime = t.startTime!;
@@ -1402,7 +1502,10 @@ constructor() {
     const x = ev.clientX - rect.left;
     const frac = Math.max(0, Math.min(1, x / rect.width));
     const t = this.track();
-    const isClip = t?.trackId.startsWith('clip:') && typeof t.startTime === 'number' && typeof t.endTime === 'number';
+    const isClip =
+      t?.trackId.startsWith('clip:') &&
+      typeof t.startTime === 'number' &&
+      typeof t.endTime === 'number';
     if (t && isClip) {
       const start = t.startTime!;
       const end = t.endTime!;
@@ -1515,15 +1618,6 @@ constructor() {
     });
   }
 
-  private buildPreview(tracks: { thumbnailUrl: string | null }[]): PlaylistRow['preview'] {
-    if (tracks.length === 0) return { kind: 'single', url: null };
-    const first4 = tracks.slice(0, 4);
-    if (first4.length < 4) return { kind: 'single', url: first4[0]?.thumbnailUrl ?? null };
-    const urls = first4.map((row) => row.thumbnailUrl).filter((u): u is string => !!u);
-    if (urls.length < 4 || new Set(urls).size < 4) return { kind: 'single', url: first4[0]?.thumbnailUrl ?? null };
-    return { kind: 'mosaic', urls };
-  }
-
   private loadPlaylistsForModal(): void {
     this.loadingLists.set(true);
     this.api.get<{ id: number; name: string; createdAt: string }[]>('playlists').subscribe({
@@ -1540,9 +1634,16 @@ constructor() {
                 id: p.id,
                 name: p.name,
                 trackCount: tracks.length,
-                preview: this.buildPreview(tracks),
+                preview: buildPlaylistPreview(tracks),
               })),
-              catchError(() => of({ id: p.id, name: p.name, trackCount: 0, preview: { kind: 'single' as const, url: null } })),
+              catchError(() =>
+                of({
+                  id: p.id,
+                  name: p.name,
+                  trackCount: 0,
+                  preview: { kind: 'single' as const, url: null },
+                }),
+              ),
             ),
           ),
         ).subscribe({
@@ -1615,18 +1716,5 @@ constructor() {
           done?.();
         },
       });
-  }
-
-  openArtist(artistName: string): void {
-    const name = artistName.trim();
-    if (!name) {
-      return;
-    }
-    this.artistLookup.resolveBrowseIdByName(name).subscribe((browseId) => {
-      if (!browseId) {
-        return;
-      }
-      void this.router.navigate(['/artists', browseId]);
-    });
   }
 }

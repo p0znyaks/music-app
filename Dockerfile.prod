@@ -1,6 +1,9 @@
 FROM node:22-alpine AS builder
 WORKDIR /app
-COPY frontend/app/package.json frontend/app/package-lock.json* ./
+COPY frontend/app/package.json frontend/app/package-lock.json ./
+# `npm ci` installs exactly what the lock file pins and fails loudly when it
+# disagrees with package.json. An `npm install` fallback here would silently
+# resolve something else and hide a broken lock file.
 RUN npm ci
 COPY frontend/app/angular.json ./angular.json
 COPY frontend/app/tsconfig.json ./tsconfig.json
@@ -10,11 +13,7 @@ COPY frontend/app/src ./src
 COPY frontend/app/public ./public
 RUN npx ng build
 
-FROM nginx:alpine
+FROM nginx:1.27-alpine
 COPY --from=builder /app/dist/app/browser /usr/share/nginx/html
 COPY nginx/nginx.prod.conf /etc/nginx/nginx.conf
-COPY nginx/certs /etc/nginx/certs
-COPY backend/server-cert.pem /etc/nginx/certs/server-cert.pem
-COPY backend/server-key.pem /etc/nginx/certs/server-key.pem
-EXPOSE 1443
-CMD ["nginx", "-g", "daemon off;"]
+EXPOSE 8443

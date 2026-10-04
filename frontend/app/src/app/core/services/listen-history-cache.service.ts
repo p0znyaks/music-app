@@ -19,7 +19,13 @@ export class ListenHistoryCacheService {
   private readonly maxItems = 500;
   private readonly keyPrefix = 'muze_listen_history_';
 
-  record(track: { trackId: string; title: string; artist: string; thumbnailUrl?: string | null; duration?: number | null }): void {
+  record(track: {
+    trackId: string;
+    title: string;
+    artist: string;
+    thumbnailUrl?: string | null;
+    duration?: number | null;
+  }): void {
     const trackId = track.trackId?.trim();
     const title = track.title?.trim();
     const artist = track.artist?.trim();
@@ -34,7 +40,7 @@ export class ListenHistoryCacheService {
 
     const prev = this.readRaw(key);
     const existingIdx = prev.findIndex((r) => r.trackId === trackId);
-    
+
     const nowIso = new Date().toISOString();
     const nextRow: CachedListenHistoryRow = {
       id: existingIdx >= 0 ? prev[existingIdx]!.id : this.localIdFromIso(nowIso),
@@ -46,7 +52,8 @@ export class ListenHistoryCacheService {
       listenedAt: nowIso,
     };
 
-    const withoutOld = existingIdx >= 0 ? [...prev.slice(0, existingIdx), ...prev.slice(existingIdx + 1)] : prev;
+    const withoutOld =
+      existingIdx >= 0 ? [...prev.slice(0, existingIdx), ...prev.slice(existingIdx + 1)] : prev;
     const next = [nextRow, ...withoutOld]
       .filter((r) => this.isValid(r))
       .sort((a, b) => new Date(b.listenedAt).getTime() - new Date(a.listenedAt).getTime())
@@ -67,14 +74,17 @@ export class ListenHistoryCacheService {
     return merged;
   }
 
-  private mergeRows(primary: CachedListenHistoryRow[], secondary: CachedListenHistoryRow[]): CachedListenHistoryRow[] {
+  private mergeRows(
+    primary: CachedListenHistoryRow[],
+    secondary: CachedListenHistoryRow[],
+  ): CachedListenHistoryRow[] {
     const map = new Map<string, CachedListenHistoryRow>();
-    
+
     for (const row of [...primary, ...secondary]) {
       if (!this.isValid(row)) {
         continue;
       }
-      
+
       const existing = map.get(row.trackId);
       if (!existing) {
         map.set(row.trackId, row);
@@ -96,7 +106,10 @@ export class ListenHistoryCacheService {
     return rows
       .filter((r) => this.isValid(r))
       .map((r) => ({
-        id: typeof r.id === 'number' && Number.isFinite(r.id) ? r.id : this.localIdFromIso(r.listenedAt),
+        id:
+          typeof r.id === 'number' && Number.isFinite(r.id)
+            ? r.id
+            : this.localIdFromIso(r.listenedAt),
         trackId: r.trackId.trim(),
         title: r.title.trim(),
         artist: r.artist.trim(),
@@ -129,7 +142,9 @@ export class ListenHistoryCacheService {
       if (!Array.isArray(parsed)) {
         return [];
       }
-      return parsed.filter((r): r is CachedListenHistoryRow => this.isValid(r as RawCachedListenHistoryRow));
+      return parsed.filter((r): r is CachedListenHistoryRow =>
+        this.isValid(r as RawCachedListenHistoryRow),
+      );
     } catch {
       return [];
     }

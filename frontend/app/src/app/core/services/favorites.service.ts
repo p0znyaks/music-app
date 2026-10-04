@@ -25,7 +25,7 @@ export class FavoritesService {
       return;
     }
     this.loadState = 'loading';
-    this.api.get<Array<{ trackId: string }>>('favorites').subscribe({
+    this.api.get<{ trackId: string }[]>('favorites').subscribe({
       next: (list) => {
         this.setFavorites(list.map((x) => x.trackId));
         this.loadState = 'loaded';
@@ -54,9 +54,7 @@ export class FavoritesService {
    * Полезно, когда страница уже получила список избранных треков и хочет синхронизировать UI-состояние (сердечки).
    */
   setFavorites(trackIds: string[]): void {
-    const normalized = trackIds
-      .map((id) => this.normalizeId(id))
-      .filter((id) => !!id);
+    const normalized = trackIds.map((id) => this.normalizeId(id)).filter((id) => !!id);
     this.trackIds$.next([...new Set(normalized)]);
   }
 

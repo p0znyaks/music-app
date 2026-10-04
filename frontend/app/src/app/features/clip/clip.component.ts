@@ -2,6 +2,8 @@ import { CommonModule } from '@angular/common';
 import { Component, computed, effect, ElementRef, inject, signal, viewChild } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ApiService } from '../../core/services/api.service';
+import { IconComponent } from '../../shared/components/icon/icon.component';
+import { ThumbComponent } from '../../shared/components/thumb/thumb.component';
 import { TranslatePipe } from '../../shared/pipes/t.pipe';
 
 interface ClipData {
@@ -16,7 +18,7 @@ interface ClipData {
 @Component({
   selector: 'app-clip',
   standalone: true,
-  imports: [CommonModule, RouterLink, TranslatePipe],
+  imports: [CommonModule, RouterLink, TranslatePipe, ThumbComponent, IconComponent],
   template: `
     @if (notFound()) {
       <div class="page not-found">
@@ -28,11 +30,7 @@ interface ClipData {
       <div class="page">
         <div class="clip-content">
           <div class="cover-wrap">
-            @if (c.thumbnailUrl) {
-              <img [src]="c.thumbnailUrl" [alt]="c.title" width="200" height="200" />
-            } @else {
-              <div class="cover-ph"></div>
-            }
+            <app-thumb [src]="c.thumbnailUrl" [alt]="c.title" [size]="200" />
           </div>
           <h2 class="track-title">{{ c.title }}</h2>
           <p class="track-artist">{{ c.artist }}</p>
@@ -45,9 +43,9 @@ interface ClipData {
               [attr.aria-label]="playing() ? 'Pause' : 'Play'"
             >
               @if (playing()) {
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
+                <app-icon name="pause" [size]="24" />
               } @else {
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                <app-icon name="play" [size]="24" />
               }
             </button>
             <div class="progress-wrap" (click)="onBarClick($event)">
@@ -55,7 +53,9 @@ interface ClipData {
                 <div class="progress-fill" [style.width.%]="progressPercent()"></div>
               </div>
             </div>
-            <span class="time-display">{{ formatTime(clipTimeElapsed()) }} / {{ formatTime(clipDuration()) }}</span>
+            <span class="time-display"
+              >{{ formatTime(clipTimeElapsed()) }} / {{ formatTime(clipDuration()) }}</span
+            >
           </div>
           <audio #audioRef preload="metadata"></audio>
         </div>
@@ -123,11 +123,6 @@ interface ClipData {
       height: 200px;
       object-fit: cover;
       display: block;
-    }
-    .cover-ph {
-      width: 200px;
-      height: 200px;
-      background: var(--bg-hover);
     }
     .track-title {
       font-size: 1.5rem;

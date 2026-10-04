@@ -39,14 +39,14 @@ execSync(
 const keyData = fs.readFileSync(keyPath);
 const certData = fs.readFileSync(certPath);
 
-fs.writeFileSync(path.join(baseDir, 'backend', 'server-key.pem'), keyData);
-fs.writeFileSync(path.join(baseDir, 'backend', 'server-cert.pem'), certData);
-fs.writeFileSync(path.join(baseDir, 'nginx', 'certs', 'server-key.pem'), keyData);
-fs.writeFileSync(path.join(baseDir, 'nginx', 'certs', 'server-cert.pem'), certData);
+// Only nginx needs the certificate: it terminates TLS for the whole app.
+const certsDir = path.join(baseDir, 'nginx', 'certs');
+fs.mkdirSync(certsDir, { recursive: true });
+fs.writeFileSync(path.join(certsDir, 'server-key.pem'), keyData);
+fs.writeFileSync(path.join(certsDir, 'server-cert.pem'), certData);
 
 try { fs.rmdirSync(tmpDir, { recursive: true }); } catch (_) {}
 
 console.log(`Generated self-signed cert for IP: ${serverIP} + localhost`);
 console.log('Updated:');
-console.log('  backend/server-cert.pem + backend/server-key.pem');
 console.log('  nginx/certs/server-cert.pem + nginx/certs/server-key.pem');

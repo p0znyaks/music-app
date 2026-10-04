@@ -6,13 +6,30 @@ import { authMiddleware } from '../src/middleware/auth.middleware';
 
 process.env.JWT_SECRET = 'test-secret-key-for-tests';
 
-const mockRoleRepo = { findOne: vi.fn().mockResolvedValue({ id: 2, name: 'user' }) };
+const mockRoleRepo = {
+  findOne: vi.fn().mockResolvedValue({ id: 2, name: 'user' }),
+};
 
 vi.mock('../src/services/dataSource', () => ({
   AppDataSource: {
     getRepository: vi.fn((entity: string) => {
       if (entity === 'Role') return mockRoleRepo;
-      return { findOne: vi.fn().mockResolvedValue(null), find: vi.fn().mockResolvedValue([]), create: vi.fn((d) => d), save: vi.fn((d) => Promise.resolve(d)), remove: vi.fn(), count: vi.fn().mockResolvedValue(0), createQueryBuilder: vi.fn(() => ({ where: vi.fn().mockReturnThis(), andWhere: vi.fn().mockReturnThis(), innerJoin: vi.fn().mockReturnThis(), getExists: vi.fn().mockResolvedValue(false), delete: vi.fn().mockReturnThis(), execute: vi.fn() })) };
+      return {
+        findOne: vi.fn().mockResolvedValue(null),
+        find: vi.fn().mockResolvedValue([]),
+        create: vi.fn((d) => d),
+        save: vi.fn((d) => Promise.resolve(d)),
+        remove: vi.fn(),
+        count: vi.fn().mockResolvedValue(0),
+        createQueryBuilder: vi.fn(() => ({
+          where: vi.fn().mockReturnThis(),
+          andWhere: vi.fn().mockReturnThis(),
+          innerJoin: vi.fn().mockReturnThis(),
+          getExists: vi.fn().mockResolvedValue(false),
+          delete: vi.fn().mockReturnThis(),
+          execute: vi.fn(),
+        })),
+      };
     }),
   },
 }));
@@ -32,7 +49,9 @@ function makeApp() {
 }
 
 function token(userId = 1, email = 'user@test.com', role = 'user') {
-  return jwt.sign({ id: userId, email, role }, 'test-secret-key-for-tests', { expiresIn: '7d' });
+  return jwt.sign({ id: userId, email, role }, 'test-secret-key-for-tests', {
+    expiresIn: '7d',
+  });
 }
 
 describe('Health endpoint', () => {
@@ -127,7 +146,11 @@ describe('Auth middleware - valid token', () => {
 describe('Auth middleware - expired token', () => {
   it('GET /protected with expired token returns 401', async () => {
     const app = makeApp();
-    const expired = jwt.sign({ id: 1, email: 'a@b.com', role: 'user' }, 'test-secret-key-for-tests', { expiresIn: '-1s' });
+    const expired = jwt.sign(
+      { id: 1, email: 'a@b.com', role: 'user' },
+      'test-secret-key-for-tests',
+      { expiresIn: '-1s' },
+    );
     const res = await request(app).get('/protected').set('Authorization', `Bearer ${expired}`);
     expect(res.status).toBe(401);
   });
@@ -184,7 +207,10 @@ describe('Edge cases', () => {
 
   it('token with extra fields works', async () => {
     const app = makeApp();
-    const t = jwt.sign({ id: 1, email: 'a@b.com', role: 'user', extra: 'data' }, 'test-secret-key-for-tests');
+    const t = jwt.sign(
+      { id: 1, email: 'a@b.com', role: 'user', extra: 'data' },
+      'test-secret-key-for-tests',
+    );
     const res = await request(app).get('/protected').set('Authorization', `Bearer ${t}`);
     expect([200, 500]).toContain(res.status);
   });

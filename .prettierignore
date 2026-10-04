@@ -1,0 +1,8 @@
+node_modules/
+dist/
+coverage/
+.angular/
+backend/coverage/
+frontend/app/coverage/
+package-lock.json
+*.md

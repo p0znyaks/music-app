@@ -12,28 +12,26 @@ function signUserToken(user: User): string {
   if (!secret) {
     throw new Error('JWT_SECRET is not set');
   }
-  return jwt.sign(
-    { id: user.id, email: user.email, role: user.role.name },
-    secret,
-    { expiresIn: JWT_EXPIRES },
-  );
+  return jwt.sign({ id: user.id, email: user.email, role: user.role.name }, secret, {
+    expiresIn: JWT_EXPIRES,
+  });
 }
 
 export class AuthService {
-  async register(
-    username: string,
-    email: string,
-    password: string,
-  ): Promise<{ token: string }> {
+  async register(username: string, email: string, password: string): Promise<{ token: string }> {
     const userRepo = AppDataSource.getRepository(User);
     const existingByEmail = await userRepo.findOne({ where: { email } });
     if (existingByEmail) {
-      throw Object.assign(new Error('Email already registered'), { code: 'EMAIL_TAKEN' });
+      throw Object.assign(new Error('Email already registered'), {
+        code: 'EMAIL_TAKEN',
+      });
     }
 
     const existingByUsername = await userRepo.findOne({ where: { username } });
     if (existingByUsername) {
-      throw Object.assign(new Error('Username is already in use'), { code: 'USERNAME_TAKEN' });
+      throw Object.assign(new Error('Username is already in use'), {
+        code: 'USERNAME_TAKEN',
+      });
     }
 
     const roleRepo = AppDataSource.getRepository(Role);
@@ -71,7 +69,9 @@ export class AuthService {
     });
 
     if (!user) {
-      throw Object.assign(new Error('Invalid credentials'), { code: 'INVALID_CREDENTIALS' });
+      throw Object.assign(new Error('Invalid credentials'), {
+        code: 'INVALID_CREDENTIALS',
+      });
     }
 
     if (user.isBlocked) {
@@ -80,7 +80,9 @@ export class AuthService {
 
     const match = await bcrypt.compare(password, user.passwordHash);
     if (!match) {
-      throw Object.assign(new Error('Invalid credentials'), { code: 'INVALID_CREDENTIALS' });
+      throw Object.assign(new Error('Invalid credentials'), {
+        code: 'INVALID_CREDENTIALS',
+      });
     }
 
     return { token: signUserToken(user) };

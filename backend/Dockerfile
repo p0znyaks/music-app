@@ -1,7 +1,7 @@
 FROM node:22-alpine
 WORKDIR /app
 
-ENV PYTHON_WORKERS=1
+# Worker-pool size is configured through .env (PYTHON_WORKERS), not baked into the image.
 ENV PY_WORKER_THREADS=16
 
 RUN apk add --no-cache python3 py3-pip ffmpeg nodejs npm \
@@ -16,6 +16,9 @@ RUN npm ci --no-audit --no-fund
 COPY tsconfig.json ./
 COPY scripts ./scripts
 COPY src ./src
+# Test suite + vitest config so `npm test` works inside the image too.
+COPY vitest.config.ts vitest.load.config.ts ./
+COPY test ./test
 
 RUN npm run build
 

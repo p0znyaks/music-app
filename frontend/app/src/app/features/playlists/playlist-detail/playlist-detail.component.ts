@@ -9,39 +9,63 @@ import { BackNavigationService } from '../../../core/services/back-navigation.se
 import { PlayerService, type PlayerTrack } from '../../../core/services/player.service';
 import { TagsService } from '../../../core/services/tags.service';
 import { AppTrack } from '../../../shared/models/track.model';
-import { formatDurationCompact, normalizeDurationSeconds } from '../../../shared/utils/duration.util';
+import {
+  formatDurationCompact,
+  normalizeDurationSeconds,
+} from '../../../shared/utils/duration.util';
 import { ModalComponent } from '../../../shared/components/modal/modal.component';
 import { TrackCardComponent } from '../../../shared/components/track-card/track-card.component';
 import { TranslatePipe } from '../../../shared/pipes/t.pipe';
 import { AppSettingsService } from '../../../core/services/app-settings.service';
+import { IconComponent } from '../../../shared/components/icon/icon.component';
+import { parseErrorPayload } from '../../../shared/utils/error-payload.util';
 
 @Component({
   selector: 'app-playlist-detail',
   standalone: true,
-  imports: [CommonModule, FormsModule, TrackCardComponent, ModalComponent, TranslatePipe],
+  imports: [
+    CommonModule,
+    FormsModule,
+    TrackCardComponent,
+    ModalComponent,
+    TranslatePipe,
+    IconComponent,
+  ],
   template: `
     <div class="page">
       <div class="head">
         <button type="button" class="back tap" (click)="back()">← {{ 'back' | t }}</button>
         <h1>{{ title() }}</h1>
         @if (!isMix()) {
-          <button type="button" class="del-btn tap" (click)="askDelete()">{{ 'deletePlaylist' | t }}</button>
+          <button type="button" class="del-btn tap" (click)="askDelete()">
+            {{ 'deletePlaylist' | t }}
+          </button>
         }
       </div>
 
       <div class="playlist-meta">
-        <div class="meta-row">
+        <div class="meta-row meta-row--spaced">
           <span class="meta-pill">{{ trackCountLabel() }}</span>
           <span class="meta-sep">·</span>
           <span class="meta-pill">{{ totalDurationLabel() }}</span>
         </div>
         <div class="action-row">
-          <button type="button" class="action-btn tap" [disabled]="tracks().length === 0" (click)="playAll()">
-            <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 2l10 6-10 6V2z"/></svg>
+          <button
+            type="button"
+            class="action-btn tap"
+            [disabled]="tracks().length === 0"
+            (click)="playAll()"
+          >
+            <app-icon name="play" />
             <span>{{ 'playAll' | t }}</span>
           </button>
-          <button type="button" class="action-btn alt tap" [disabled]="tracks().length === 0" (click)="shuffleAll()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+          <button
+            type="button"
+            class="action-btn alt tap"
+            [disabled]="tracks().length === 0"
+            (click)="shuffleAll()"
+          >
+            <app-icon name="expand" />
             <span>{{ 'shuffle' | t }}</span>
           </button>
         </div>
@@ -50,7 +74,14 @@ import { AppSettingsService } from '../../../core/services/app-settings.service'
       <div class="list">
         @for (row of tracks(); track row.trackId + '-' + row.id) {
           <div class="row">
-            <app-track-card class="grow" [track]="toAppTrack(row)" [showDuration]="true" [inPlaylist]="true" [allowTagging]="!isMix()" [queue]="queueTracks()" />
+            <app-track-card
+              class="grow"
+              [track]="toAppTrack(row)"
+              [showDuration]="true"
+              [inPlaylist]="true"
+              [allowTagging]="!isMix()"
+              [queue]="queueTracks()"
+            />
             @if (!isMix()) {
               <button
                 type="button"
@@ -73,26 +104,32 @@ import { AppSettingsService } from '../../../core/services/app-settings.service'
           <div class="modal-title">{{ 'deletePlaylistTitle' | t }}</div>
           <div class="modal-text">{{ 'deletePlaylistConfirm' | t }}</div>
           <div class="modal-actions">
-            <button type="button" class="btn ghost tap" (click)="cancelDelete()">{{ 'no' | t }}</button>
-            <button type="button" class="btn danger tap" (click)="confirmDelete()">{{ 'yes' | t }}</button>
+            <button type="button" class="btn ghost tap" (click)="cancelDelete()">
+              {{ 'no' | t }}
+            </button>
+            <button type="button" class="btn danger tap" (click)="confirmDelete()">
+              {{ 'yes' | t }}
+            </button>
           </div>
         </div>
       </div>
     }
 
-    <app-modal [title]="'trackHasTags' | t" [isOpen]="confirmOpen()" (closed)="confirmOpen.set(false)">
+    <app-modal
+      [title]="'trackHasTags' | t"
+      [isOpen]="confirmOpen()"
+      (closed)="confirmOpen.set(false)"
+    >
       <p>{{ 'removeTrackWithTagsConfirm' | t }}</p>
       <div class="confirm-row">
-        <button type="button" class="rm ghost" (click)="confirmOpen.set(false)">{{ 'no' | t }}</button>
+        <button type="button" class="rm ghost" (click)="confirmOpen.set(false)">
+          {{ 'no' | t }}
+        </button>
         <button type="button" class="rm danger" (click)="confirmRemove()">{{ 'yes' | t }}</button>
       </div>
     </app-modal>
   `,
   styles: `
-    .page {
-      padding: 0 1.5rem 2rem 2rem;
-      max-width: 720px;
-    }
     .head {
       display: flex;
       flex-wrap: wrap;
@@ -107,16 +144,6 @@ import { AppSettingsService } from '../../../core/services/app-settings.service'
     }
     .playlist-meta {
       margin-bottom: 1.1rem;
-    }
-    .meta-row {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      margin-bottom: 0.7rem;
-    }
-    .meta-pill {
-      font-size: 0.86rem;
-      color: var(--accent-dim);
     }
     .meta-sep {
       color: var(--accent-dim);
@@ -326,14 +353,14 @@ import { AppSettingsService } from '../../../core/services/app-settings.service'
       color: var(--accent);
     }
     .btn.danger {
-      background: #ef4444;
-      border-color: #ef4444;
-      color: #0b0b0c;
+      background: var(--danger);
+      border-color: var(--danger);
+      color: var(--on-danger);
       font-weight: 700;
     }
     .btn.danger:hover {
-      background: #dc2626;
-      border-color: #dc2626;
+      background: var(--danger-strong);
+      border-color: var(--danger-strong);
     }
     .btn:disabled {
       opacity: 0.45;
@@ -370,10 +397,17 @@ export class PlaylistDetailComponent {
 
   readonly confirmOpen = signal(false);
   readonly pendingRemoveTrackId = signal<string | null>(null);
-  readonly queueTracks = computed<PlayerTrack[]>(() => this.tracks().map((row) => this.toPlayerTrack(row)));
-  readonly trackCountLabel = computed(() => `${this.tracks().length} ${this.settings.t('tracksSuffix')}`);
+  readonly queueTracks = computed<PlayerTrack[]>(() =>
+    this.tracks().map((row) => this.toPlayerTrack(row)),
+  );
+  readonly trackCountLabel = computed(
+    () => `${this.tracks().length} ${this.settings.t('tracksSuffix')}`,
+  );
   readonly totalDurationLabel = computed(() => {
-    const totalSec = this.tracks().reduce((sum, row) => sum + (normalizeDurationSeconds(row.duration) ?? 0), 0);
+    const totalSec = this.tracks().reduce(
+      (sum, row) => sum + (normalizeDurationSeconds(row.duration) ?? 0),
+      0,
+    );
     return formatDurationCompact(totalSec);
   });
 
@@ -428,52 +462,82 @@ export class PlaylistDetailComponent {
   loadTracks(): void {
     const mid = this.mixId();
     if (mid) {
-      this.api.get<{ id: number; trackId: string; title: string; artist: string; thumbnailUrl: string | null; duration: number | null; startTime?: number | null; endTime?: number | null; addedAt?: string | null }[]>(`reco/mixes/${encodeURIComponent(mid)}`).subscribe({
-        next: (list) => {
-          this.tracks.set(list);
-          const m = /-(\d+)$/.exec(mid);
-          const n = m ? parseInt(m[1], 10) : NaN;
-          if (Number.isFinite(n)) {
-            this.title.set(`${this.mixBaseTitle()} #${n}`);
-          } else if (this.title() === this.mixBaseTitle()) {
-            this.title.set(this.mixBaseTitle());
-          }
-        },
-      });
+      this.api
+        .get<
+          {
+            id: number;
+            trackId: string;
+            title: string;
+            artist: string;
+            thumbnailUrl: string | null;
+            duration: number | null;
+            startTime?: number | null;
+            endTime?: number | null;
+            addedAt?: string | null;
+          }[]
+        >(`reco/mixes/${encodeURIComponent(mid)}`)
+        .subscribe({
+          next: (list) => {
+            this.tracks.set(list);
+            const m = /-(\d+)$/.exec(mid);
+            const n = m ? parseInt(m[1], 10) : NaN;
+            if (Number.isFinite(n)) {
+              this.title.set(`${this.mixBaseTitle()} #${n}`);
+            } else if (this.title() === this.mixBaseTitle()) {
+              this.title.set(this.mixBaseTitle());
+            }
+          },
+        });
       return;
     }
 
     const pid = this.playlistId();
-    this.api.get<{ id: number; trackId: string; title: string; artist: string; thumbnailUrl: string | null; duration: number | null; startTime?: number | null; endTime?: number | null; addedAt?: string | null }[]>(`playlists/${pid}/tracks`).subscribe({
-      next: (list) => {
-        this.tracks.set(list);
-        if (this.title() === this.playlistBaseTitle() && !history.state?.name) {
-          this.title.set(`${this.settings.t('playlists')} #${pid}`);
-        }
-        const missing = list.filter((t) => t.duration == null).slice(0, 10);
-        if (missing.length > 0) {
-          forkJoin(
-            missing.map((t) =>
-              this.api.get<{ duration: number }>(`tracks/${encodeURIComponent(t.trackId)}/metadata`).pipe(
-                map((meta) => {
-                  const d = normalizeDurationSeconds(meta.duration);
-                  return d != null ? { index: list.indexOf(t), duration: d } : null;
-                }),
-                catchError(() => of(null)),
+    this.api
+      .get<
+        {
+          id: number;
+          trackId: string;
+          title: string;
+          artist: string;
+          thumbnailUrl: string | null;
+          duration: number | null;
+          startTime?: number | null;
+          endTime?: number | null;
+          addedAt?: string | null;
+        }[]
+      >(`playlists/${pid}/tracks`)
+      .subscribe({
+        next: (list) => {
+          this.tracks.set(list);
+          if (this.title() === this.playlistBaseTitle() && !history.state?.name) {
+            this.title.set(`${this.settings.t('playlists')} #${pid}`);
+          }
+          const missing = list.filter((t) => t.duration == null).slice(0, 10);
+          if (missing.length > 0) {
+            forkJoin(
+              missing.map((t) =>
+                this.api
+                  .get<{ duration: number }>(`tracks/${encodeURIComponent(t.trackId)}/metadata`)
+                  .pipe(
+                    map((meta) => {
+                      const d = normalizeDurationSeconds(meta.duration);
+                      return d != null ? { index: list.indexOf(t), duration: d } : null;
+                    }),
+                    catchError(() => of(null)),
+                  ),
               ),
-            ),
-          ).subscribe((results) => {
-            const updated = [...this.tracks()];
-            for (const r of results) {
-              if (r) {
-                updated[r.index] = { ...updated[r.index], duration: r.duration };
+            ).subscribe((results) => {
+              const updated = [...this.tracks()];
+              for (const r of results) {
+                if (r) {
+                  updated[r.index] = { ...updated[r.index], duration: r.duration };
+                }
               }
-            }
-            this.tracks.set(updated);
-          });
-        }
-      },
-    });
+              this.tracks.set(updated);
+            });
+          }
+        },
+      });
   }
 
   private playlistBaseTitle(): string {
@@ -484,7 +548,7 @@ export class PlaylistDetailComponent {
     return this.settings.t('homeMixesForYou');
   }
 
-toAppTrack(row: {
+  toAppTrack(row: {
     trackId: string;
     title: string;
     artist: string;
@@ -545,7 +609,7 @@ toAppTrack(row: {
       },
       error: (err) => {
         if (err instanceof HttpErrorResponse && err.status === 409) {
-          const payload = this.parseErrorPayload(err);
+          const payload = parseErrorPayload(err);
           if (payload?.requiresConfirm) {
             this.pendingRemoveTrackId.set(trackId);
             this.confirmOpen.set(true);
@@ -579,21 +643,6 @@ toAppTrack(row: {
         this.pendingRemoveTrackId.set(null);
       },
     });
-  }
-
-  private parseErrorPayload(err: HttpErrorResponse): any {
-    const e = err.error;
-    if (e && typeof e === 'object') {
-      return e;
-    }
-    if (typeof e === 'string') {
-      try {
-        return JSON.parse(e);
-      } catch {
-        return null;
-      }
-    }
-    return null;
   }
 
   back(): void {

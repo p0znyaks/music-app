@@ -1,7 +1,11 @@
 import { CommonModule } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { ApiService } from '../../core/services/api.service';
-import { AppLanguage, AppSettingsService, AppTheme } from '../../core/services/app-settings.service';
+import {
+  AppLanguage,
+  AppSettingsService,
+  AppTheme,
+} from '../../core/services/app-settings.service';
 import { TranslatePipe } from '../../shared/pipes/t.pipe';
 
 interface ProfileData {
@@ -57,10 +61,20 @@ interface ProfileData {
           <div class="setting-group">
             <h3 class="setting-heading">{{ 'appearance' | t }}</h3>
             <div class="setting-options">
-              <button type="button" class="option-btn" [class.active]="theme() === 'dark'" (click)="setTheme('dark')">
+              <button
+                type="button"
+                class="option-btn"
+                [class.active]="theme() === 'dark'"
+                (click)="setTheme('dark')"
+              >
                 {{ 'darkTheme' | t }}
               </button>
-              <button type="button" class="option-btn" [class.active]="theme() === 'light'" (click)="setTheme('light')">
+              <button
+                type="button"
+                class="option-btn"
+                [class.active]="theme() === 'light'"
+                (click)="setTheme('light')"
+              >
                 {{ 'lightTheme' | t }}
               </button>
             </div>
@@ -69,10 +83,20 @@ interface ProfileData {
           <div class="setting-group">
             <h3 class="setting-heading">{{ 'applicationLanguage' | t }}</h3>
             <div class="setting-options">
-              <button type="button" class="option-btn" [class.active]="language() === 'en'" (click)="setLanguage('en')">
+              <button
+                type="button"
+                class="option-btn"
+                [class.active]="language() === 'en'"
+                (click)="setLanguage('en')"
+              >
                 {{ 'english' | t }}
               </button>
-              <button type="button" class="option-btn" [class.active]="language() === 'ru'" (click)="setLanguage('ru')">
+              <button
+                type="button"
+                class="option-btn"
+                [class.active]="language() === 'ru'"
+                (click)="setLanguage('ru')"
+              >
                 {{ 'russian' | t }}
               </button>
             </div>
@@ -82,10 +106,6 @@ interface ProfileData {
     </div>
   `,
   styles: `
-    .page {
-      padding: 0 1.5rem 2rem 2rem;
-      max-width: 720px;
-    }
     .loader {
       color: var(--accent-dim);
       padding: 2rem;

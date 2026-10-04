@@ -1,20 +1,24 @@
 import { Request, Response } from 'express';
-import { In } from 'typeorm';
 import { AppDataSource } from '../services/dataSource';
 import { FavoriteTrack } from '../entities/favorite-track.entity';
-import { PlaylistTrack } from '../entities/playlist-track.entity';
-import { Playlist } from '../entities/playlist.entity';
-import { TrackTag } from '../entities/track-tag.entity';
+import { assessRemoval, deleteTagsForTrack } from '../services/library/track-lifecycle.service';
 import { User } from '../entities/user.entity';
-import { Clip } from '../entities/clip.entity';
+import { completeTrackMedia } from '../services/track-media.service';
+import { clipShortCode, loadClipTimes } from '../services/tags/clip-times';
+import { routeParam, wantsForce } from '../http/params';
 
-function paramTrackId(raw: string | string[] | undefined): string {
-  if (raw === undefined) {
-    return '';
-  }
-  const s = Array.isArray(raw) ? raw[0] : raw;
-  return typeof s === 'string' ? decodeURIComponent(s) : '';
-}
+type FavoriteTrackResponse = {
+  id: number;
+  trackId: string;
+  title: string;
+  artist: string;
+  thumbnailUrl: string | null;
+  duration: number | null;
+  addedAt: Date;
+  /** Present only for clip tracks. */
+  startTime?: number;
+  endTime?: number;
+};
 
 export async function addFavorite(req: Request, res: Response) {
   const userId = req.user?.id;
@@ -38,13 +42,18 @@ export async function addFavorite(req: Request, res: Response) {
     return res.status(409).json({ message: 'Already in favorites' });
   }
 
+  // Duration and artwork are resolved before the write so the stored row is
+  // complete: a track saved from a clip or a pasted URL would otherwise sit in
+  // the database with no length until something needed to display it.
+  const media = await completeTrackMedia({ trackId, thumbnailUrl, duration });
+
   const row = repo.create({
     user: { id: userId } as User,
     trackId: trackId.trim(),
     title,
     artist,
-    thumbnailUrl: typeof thumbnailUrl === 'string' ? thumbnailUrl : null,
-    duration: typeof duration === 'number' && Number.isFinite(duration) ? Math.floor(duration) : null,
+    thumbnailUrl: media.thumbnailUrl,
+    duration: media.duration,
   });
   await repo.save(row);
 
@@ -65,12 +74,12 @@ export async function removeFavorite(req: Request, res: Response) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
 
-  const trackId = paramTrackId(req.params.trackId);
+  const trackId = routeParam(req.params.trackId);
   if (!trackId) {
     return res.status(400).json({ message: 'trackId is required' });
   }
 
-  const force = (req.query as any)?.force === '1';
+  const force = wantsForce(req.query);
 
   const repo = AppDataSource.getRepository(FavoriteTrack);
   const row = await repo.findOne({
@@ -80,36 +89,23 @@ export async function removeFavorite(req: Request, res: Response) {
     return res.status(404).json({ message: 'Favorite not found' });
   }
 
-  const tagRepo = AppDataSource.getRepository(TrackTag);
-  const tagCount = await tagRepo.count({ where: { user: { id: userId }, trackId } });
-
-  const playlistTrackRepo = AppDataSource.getRepository(PlaylistTrack);
-  const inAnyPlaylist = await playlistTrackRepo
-    .createQueryBuilder('pt')
-    .innerJoin('pt.playlist', 'p')
-    .where('p.user_id = :uid', { uid: userId })
-    .andWhere('pt.trackId = :tid', { tid: trackId })
-    .getExists();
-
-  const willHaveNoSources = !inAnyPlaylist;
-  if (!force && tagCount > 0 && willHaveNoSources) {
+  // Removing from favorites orphans the track only if no playlist holds it.
+  const impact = await assessRemoval(userId, trackId, {
+    excludeFavorite: true,
+  });
+  if (!impact.stillReferenced && impact.tagCount > 0 && !force) {
     return res.status(409).json({
       message: 'Track has tags. Confirmation required.',
       requiresConfirm: true,
       hasTags: true,
-      tagCount,
+      tagCount: impact.tagCount,
     });
   }
 
   await repo.remove(row);
 
-  if (willHaveNoSources) {
-    await tagRepo
-      .createQueryBuilder()
-      .delete()
-      .where('user_id = :uid', { uid: userId })
-      .andWhere('track_id = :tid', { tid: trackId })
-      .execute();
+  if (!impact.stillReferenced) {
+    await deleteTagsForTrack(userId, trackId);
   }
 
   return res.status(204).send();
@@ -127,40 +123,27 @@ export async function listFavorites(req: Request, res: Response) {
     order: { addedAt: 'DESC' },
   });
 
-  const clipShortCodes = rows
-    .filter((r) => r.trackId.startsWith('clip:'))
-    .map((r) => r.trackId.slice(5));
-  const clipMap = new Map<string, { startTime: number; endTime: number }>();
-  if (clipShortCodes.length > 0) {
-    const clipRepo = AppDataSource.getRepository(Clip);
-    const clips = await clipRepo.find({
-      where: { shortCode: In(clipShortCodes) },
-    });
-    for (const c of clips) {
-      clipMap.set(c.shortCode, { startTime: c.startTime, endTime: c.endTime });
-    }
-  }
+  const clipTimes = await loadClipTimes(rows.map((row) => row.trackId));
 
   return res.json(
-    rows.map((r) => {
-      const base: any = {
-        id: r.id,
-        trackId: r.trackId,
-        title: r.title,
-        artist: r.artist,
-        thumbnailUrl: r.thumbnailUrl,
-        duration: r.duration,
-        addedAt: r.addedAt,
+    rows.map((row) => {
+      const track: FavoriteTrackResponse = {
+        id: row.id,
+        trackId: row.trackId,
+        title: row.title,
+        artist: row.artist,
+        thumbnailUrl: row.thumbnailUrl,
+        duration: row.duration,
+        addedAt: row.addedAt,
       };
-      if (r.trackId.startsWith('clip:')) {
-        const sc = r.trackId.slice(5);
-        const clip = clipMap.get(sc);
-        if (clip) {
-          base.startTime = clip.startTime;
-          base.endTime = clip.endTime;
-        }
+
+      const shortCode = clipShortCode(row.trackId);
+      const clip = shortCode ? clipTimes.get(shortCode) : undefined;
+      if (clip) {
+        track.startTime = clip.startTime;
+        track.endTime = clip.endTime;
       }
-      return base;
+      return track;
     }),
   );
 }

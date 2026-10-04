@@ -3,15 +3,8 @@ import express from 'express';
 import https from 'https';
 import fs from 'fs';
 import path from 'path';
-import { Clip } from './entities/clip.entity';
-import { FavoriteTrack } from './entities/favorite-track.entity';
-import { ListenHistory } from './entities/listen-history.entity';
-import { PlaylistTrack } from './entities/playlist-track.entity';
-import { Playlist } from './entities/playlist.entity';
-import { Role } from './entities/role.entity';
-import { TrackTag } from './entities/track-tag.entity';
-import { User } from './entities/user.entity';
-import { AppDataSource } from './services/dataSource';
+import { AppDataSource, dataSourceOptions } from './services/dataSource';
+import { createLogger } from './logger';
 import { startPythonPool } from './services/python-pool';
 import { connectRedis } from './services/redis';
 import { rewriteImageUrlsDeep } from './services/image-proxy.service';
@@ -28,40 +21,18 @@ import { searchRouter } from './routes/search.routes';
 import { tagsRouter } from './routes/tags.routes';
 import { trackRouter } from './routes/track.routes';
 
+const log = createLogger('main');
+
 AppDataSource.setOptions({
-  entities: [
-    Role,
-    User,
-    Playlist,
-    PlaylistTrack,
-    FavoriteTrack,
-    ListenHistory,
-    TrackTag,
-    Clip,
-  ],
-  synchronize: true,
+  ...dataSourceOptions(),
+  // Safe for a single-instance deployment: migrations are idempotent and run
+  // on boot instead of letting TypeORM silently mutate the schema.
+  migrationsRun: true,
 });
 
-async function ensureDefaultRoles() {
-  const roleRepo = AppDataSource.getRepository(Role);
-  if ((await roleRepo.count()) > 0) {
-    return;
-  }
-  await roleRepo.insert([
-    { id: 1, name: 'guest' },
-    { id: 2, name: 'user' },
-  ]);
-  await AppDataSource.query(
-    `SELECT setval(
-      pg_get_serial_sequence('roles', 'id'),
-      COALESCE((SELECT MAX(id) FROM roles), 1)
-    )`,
-  );
-}
-
 async function bootstrap() {
+  // Applies pending migrations, then connects Redis and the yt-dlp worker pool.
   await AppDataSource.initialize();
-  await ensureDefaultRoles();
 
   const redis = connectRedis();
   await redis.ping();
@@ -70,7 +41,7 @@ async function bootstrap() {
 
   const app = express();
   app.use(express.json());
-  app.use((req, res, next) => {
+  app.use((_req, res, next) => {
     const rawJson = res.json.bind(res);
     res.json = ((body: unknown) => rawJson(rewriteImageUrlsDeep(body))) as typeof res.json;
     next();
@@ -98,16 +69,16 @@ async function bootstrap() {
       app,
     );
     httpsServer.listen(port, () => {
-      console.log(`Server listening on https://localhost:${port}`);
+      log.info(`Server listening on https://localhost:${port}`);
     });
   } else {
     app.listen(port, () => {
-      console.log(`Server listening on port ${port} (http)`);
+      log.info(`Server listening on port ${port} (http)`);
     });
   }
 }
 
 bootstrap().catch((err) => {
-  console.error(err);
+  log.error('Failed to start', err);
   process.exit(1);
 });

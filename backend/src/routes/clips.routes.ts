@@ -1,6 +1,10 @@
 import { Router } from 'express';
 import { authMiddleware } from '../middleware/auth.middleware';
-import { createClip, getClipByShortCode, proxyClipByShortCode } from '../controllers/clips.controller';
+import {
+  createClip,
+  getClipByShortCode,
+  proxyClipByShortCode,
+} from '../controllers/clips.controller';
 
 export const clipsRouter = Router();
 
