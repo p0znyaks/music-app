@@ -202,6 +202,12 @@ jobs:
       - name: Minimal environment
         run: cp .env.example .env
 
+      # nginx refuses to start when the TLS certificate is missing, and the
+      # real one is deliberately untracked. Generate a throwaway self-signed
+      # pair for the runner.
+      - name: Generate a self-signed certificate
+        run: node gen-cert-for-server.js 127.0.0.1
+
       - name: Start the stack
         run: docker compose up -d --wait --wait-timeout 240
 
