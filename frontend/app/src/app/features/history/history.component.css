@@ -1,0 +1,74 @@
+:host {
+  display: block;
+  background: var(--bg);
+  min-height: 100%;
+}
+.page {
+  padding: 0 1.5rem 0 2rem;
+  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin-bottom: 0.9rem;
+}
+.muted {
+  color: var(--accent-dim);
+}
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.85rem 1.05rem;
+  transition: border-color 0.2s ease;
+  margin-top: -4px;
+}
+.search-box:focus-within {
+  border-color: #444;
+}
+.lens {
+  width: 24px;
+  height: 24px;
+  color: var(--accent-dim);
+  flex-shrink: 0;
+}
+.inp {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 1.12rem;
+  font-weight: 500;
+  outline: none;
+}
+.inp::placeholder {
+  color: var(--accent-dim);
+  font-weight: 400;
+}
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.period {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+h2 {
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent-dim);
+  margin: 0;
+}

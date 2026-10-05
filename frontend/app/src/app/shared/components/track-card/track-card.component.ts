@@ -1,6 +1,14 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, input, output, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+  input,
+  output,
+  signal,
+} from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { catchError, forkJoin, map, of, switchMap } from 'rxjs';
@@ -30,6 +38,7 @@ import {
 @Component({
   selector: 'app-track-card',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     CommonModule,
     FormsModule,
@@ -39,7 +48,15 @@ import {
     IconComponent,
   ],
   template: `
-    <div class="card" (click)="onCardClick($event)">
+    <div
+      class="card"
+      role="button"
+      tabindex="0"
+      [attr.aria-label]="('play' | t) + ': ' + track().title"
+      (click)="onCardClick($event)"
+      (keydown.enter)="onPlay()"
+      (keydown.space)="$event.preventDefault(); onPlay()"
+    >
       <div class="thumb-wrap">
         <app-thumb [src]="track().thumbnailUrl" [alt]="track().title" [size]="44" />
       </div>
@@ -76,13 +93,9 @@ import {
           [attr.aria-label]="'play' | t"
         >
           @if (isCurrentTrack() && isPlaying()) {
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-              <path
-                d="M3.5 2.5c0-.55.45-1 1-1h2c.55 0 1 .45 1 1v11c0 .55-.45 1-1 1h-2c-.55 0-1-.45-1-1v-11zM8.5 2.5c0-.55.45-1 1-1h2c.55 0 1 .45 1 1v11c0 .55-.45 1-1 1h-2c-.55 0-1-.45-1-1v-11z"
-              />
-            </svg>
+            <app-icon name="pause" [size]="ACTION_ICON_SIZE" />
           } @else {
-            <app-icon name="play" />
+            <app-icon name="play" [size]="ACTION_ICON_SIZE" />
           }
         </button>
         <button
@@ -94,9 +107,9 @@ import {
           [attr.aria-label]="'favorite' | t"
         >
           @if (favored()) {
-            <app-icon name="heart" />
+            <app-icon name="heart" [size]="ACTION_ICON_SIZE" />
           } @else {
-            <app-icon name="heart" [filled]="false" />
+            <app-icon name="heart" [size]="ACTION_ICON_SIZE" [filled]="false" />
           }
         </button>
         @if (canTag()) {
@@ -107,18 +120,7 @@ import {
             [title]="'tag' | t"
             [attr.aria-label]="'tag' | t"
           >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path
-                d="M2 2h6.59a1 1 0 0 1 .7.29l5.42 5.42a1 1 0 0 1 0 1.41l-5.42 5.42a1 1 0 0 1-1.41 0L2 9.71A1 1 0 0 1 2 8.29V2z"
-              />
-            </svg>
+            <app-icon name="tag" [size]="ACTION_ICON_SIZE" />
           </button>
         }
         <button
@@ -128,28 +130,19 @@ import {
           [title]="'addToPlaylist' | t"
           [attr.aria-label]="'addToPlaylist' | t"
         >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 16 16"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <path d="M8 3v10M3 8h10" />
-          </svg>
+          <app-icon name="plus" [size]="ACTION_ICON_SIZE" />
         </button>
       </div>
     </div>
     @if (trackTags().length > 0) {
-      <div class="tags-line" (click)="$event.stopPropagation()">
+      <div class="tags-line">
         @for (t of trackTags(); track t) {
           <span class="tag-chip">#{{ t }}</span>
         }
       </div>
     }
     @if (tagOpen()) {
-      <div class="tag-panel" (click)="$event.stopPropagation()">
+      <div class="tag-panel">
         @if (trackTags().length > 0) {
           <div class="cur-tags">
             @for (t of trackTags(); track t) {
@@ -292,454 +285,16 @@ import {
       }
     </app-modal>
   `,
-  styles: `
-    :host {
-      display: block;
-    }
-    .card {
-      display: flex;
-      align-items: center;
-      height: 64px;
-      gap: 12px;
-      padding: 0 12px;
-      background: transparent;
-      border-radius: 8px;
-      transition: background 0.2s ease;
-    }
-    .card:hover {
-      background: var(--bg-hover);
-    }
-    .thumb-wrap {
-      flex-shrink: 0;
-      border-radius: 6px;
-      overflow: hidden;
-      width: 44px;
-      height: 44px;
-    }
-    .thumb-wrap img {
-      display: block;
-      width: 44px;
-      height: 44px;
-      object-fit: cover;
-    }
-    .thumb-ph {
-      width: 44px;
-      height: 44px;
-    }
-    .info {
-      flex: 1;
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      justify-content: center;
-    }
-    .title {
-      font-size: 14px;
-      font-weight: 500;
-      color: var(--accent);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .title-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      min-width: 0;
-    }
-    .eq {
-      display: inline-flex;
-      align-items: flex-end;
-      gap: 2px;
-      width: 14px;
-      height: 12px;
-      flex-shrink: 0;
-    }
-    .eq span {
-      width: 3px;
-      border-radius: 999px;
-      background: var(--accent);
-      transform-origin: bottom;
-      animation: eq-wave 850ms ease-in-out infinite;
-    }
-    .eq span:nth-child(1) {
-      height: 45%;
-      animation-delay: 0ms;
-    }
-    .eq span:nth-child(2) {
-      height: 75%;
-      animation-delay: 140ms;
-    }
-    .eq span:nth-child(3) {
-      height: 60%;
-      animation-delay: 260ms;
-    }
-    @keyframes eq-wave {
-      0%,
-      100% {
-        transform: scaleY(0.35);
-        opacity: 0.85;
-      }
-      50% {
-        transform: scaleY(1);
-        opacity: 1;
-      }
-    }
-    .row-badge {
-      flex-shrink: 0;
-      font-size: 10px;
-      font-weight: 600;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      color: var(--accent-dim);
-      padding: 4px 8px;
-      border-radius: 6px;
-      background: var(--bg-hover);
-      border: 1px solid var(--border);
-    }
-    .meta {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      min-width: 0;
-      font-size: 12px;
-      color: var(--accent-dim);
-    }
-    .artist {
-      border: none;
-      background: transparent;
-      padding: 0;
-      cursor: pointer;
-      text-align: left;
-      font: inherit;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      min-width: 0;
-      color: var(--accent-dim);
-      text-decoration: none;
-      transition: color 0.2s ease;
-    }
-    .artist:hover,
-    .artist:focus-visible {
-      color: var(--accent);
-      text-decoration: underline;
-      outline: none;
-    }
-    .meta-sep {
-      flex-shrink: 0;
-      opacity: 0.55;
-    }
-    .dur {
-      flex-shrink: 0;
-      color: var(--accent-dim);
-      font-variant-numeric: tabular-nums;
-    }
-    .actions {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      flex-shrink: 0;
-    }
-    .act {
-      min-width: 36px;
-      width: 36px;
-      height: 36px;
-      border: none;
-      border-radius: 50%;
-      background: transparent;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--accent-dim);
-      transition:
-        color 0.2s ease,
-        background 0.2s ease;
-    }
-    .act svg {
-      width: 18px;
-      height: 18px;
-      display: block;
-      flex-shrink: 0;
-    }
-    .act:hover {
-      color: var(--accent);
-      background: var(--bg-hover);
-    }
-    .act.tap:active {
-      transform: scale(0.92);
-    }
-    .act.fav {
-      color: var(--accent-dim);
-    }
-    .act.fav.fav-on {
-      color: var(--accent);
-    }
-    .act.fav.fav-on:hover {
-      color: var(--accent);
-      background: var(--bg-hover);
-    }
-    .act.fav:not(.fav-on):hover {
-      color: var(--accent);
-    }
-    .tag-row {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      margin-top: 8px;
-      padding: 0 4px 8px;
-    }
-    .tags-line {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      padding: 0 12px 6px;
-      margin-top: 2px;
-    }
-    .tag-chip {
-      font-size: 12px;
-      color: var(--accent-dim);
-      background: var(--overlay-chip-bg);
-      border: 1px solid var(--overlay-chip-border);
-      padding: 2px 8px;
-      border-radius: 999px;
-      white-space: nowrap;
-    }
-    .tag-panel {
-      margin-top: 8px;
-      padding: 8px 6px 6px;
-      border-radius: 10px;
-      background: var(--overlay-panel-bg);
-      border: 1px solid var(--overlay-panel-border);
-    }
-    .cur-tags {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      padding: 0 4px 6px;
-    }
-    .cur-tag {
-      border: 1px solid var(--overlay-chip-border-strong);
-      background: var(--overlay-chip-bg);
-      color: var(--accent);
-      padding: 4px 10px;
-      border-radius: 999px;
-      font-size: 12px;
-      cursor: pointer;
-    }
-    .cur-tag:hover {
-      background: var(--overlay-panel-bg-strong);
-    }
-    .tag-sort {
-      display: flex;
-      gap: 8px;
-      padding: 0 4px 6px;
-    }
-    .sort-btn {
-      border: 1px solid var(--overlay-chip-border-mid);
-      background: transparent;
-      color: var(--accent-dim);
-      padding: 6px 10px;
-      border-radius: 999px;
-      font-size: 12px;
-      cursor: pointer;
-    }
-    .sort-btn.active {
-      background: var(--overlay-chip-border-mid);
-      color: var(--accent);
-    }
-    .tag-suggest {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      padding: 0 4px 6px;
-      max-height: 96px;
-      overflow: auto;
-    }
-    .sug {
-      border: 1px solid var(--overlay-chip-border-mid);
-      background: transparent;
-      color: var(--accent-dim);
-      padding: 4px 10px;
-      border-radius: 999px;
-      font-size: 12px;
-      cursor: pointer;
-    }
-    .sug:hover {
-      color: var(--accent);
-      border-color: var(--overlay-chip-border-strong);
-    }
-    .sug:disabled {
-      opacity: 0.35;
-      cursor: not-allowed;
-    }
-    .confirm-row {
-      display: flex;
-      justify-content: flex-end;
-      gap: 10px;
-      margin-top: 12px;
-    }
-    .tag-inp {
-      flex: 1;
-      padding: 8px 12px;
-      border-radius: 6px;
-      border: 1px solid var(--border);
-      background: var(--bg-hover);
-      font-size: 14px;
-      color: var(--accent);
-    }
-    .tag-btn {
-      padding: 8px 14px;
-      border-radius: 6px;
-      border: none;
-      background: var(--accent);
-      color: var(--bg);
-      font-size: 13px;
-      cursor: pointer;
-    }
-    .tag-btn.ghost {
-      background: transparent;
-      color: var(--accent-dim);
-    }
-    .pl-create {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      margin-top: 4px;
-    }
-    .pl-inp {
-      flex: 1;
-      padding: 10px 12px;
-      border-radius: 10px;
-      border: 1px solid var(--border);
-      background: var(--bg);
-      color: var(--text, #fff);
-      font-size: 14px;
-      min-width: 0;
-    }
-    .pl-create-btn {
-      flex-shrink: 0;
-      padding: 10px 14px;
-      border-radius: 10px;
-      border: 1px solid var(--border);
-      background: var(--accent);
-      color: var(--bg);
-      font-size: 13px;
-      cursor: pointer;
-      transition: transform 0.12s ease;
-    }
-    .pl-create-btn.tap:active {
-      transform: scale(0.96);
-    }
-    .pl-create-btn:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-    .pl-sep {
-      height: 1px;
-      background: var(--border);
-      margin: 10px 0;
-      opacity: 0.7;
-    }
-    .pl-empty {
-      margin: 0;
-      color: var(--accent-dim);
-      font-size: 0.9rem;
-    }
-    .pl-list {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      max-height: 280px;
-      overflow-y: auto;
-      padding-right: 2px;
-    }
-    .pl-row {
-      width: 100%;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      text-align: left;
-      padding: 10px;
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      background: var(--bg-card);
-      color: inherit;
-      cursor: pointer;
-      transition:
-        background 0.2s ease,
-        border-color 0.2s ease,
-        transform 0.12s ease;
-    }
-    .pl-row:hover {
-      background: var(--bg-hover);
-      border-color: var(--accent-dim);
-    }
-    .pl-row.tap:active {
-      transform: scale(0.99);
-    }
-    .pl-prev {
-      width: 44px;
-      height: 44px;
-      border-radius: 10px;
-      overflow: hidden;
-      border: 1px solid var(--border);
-      background: var(--bg);
-      flex-shrink: 0;
-    }
-    .pl-cover {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      display: block;
-    }
-    .pl-cover.ph {
-      width: 100%;
-      height: 100%;
-      background:
-        radial-gradient(60% 60% at 30% 25%, rgba(255, 255, 255, 0.14), transparent 65%),
-        linear-gradient(135deg, rgba(138, 92, 255, 0.55), rgba(0, 229, 255, 0.25));
-      filter: saturate(1.1);
-    }
-    .pl-mosaic {
-      width: 100%;
-      height: 100%;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      grid-template-rows: 1fr 1fr;
-      gap: 2px;
-      background: var(--overlay-chip-bg);
-    }
-    .pl-mosaic-img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      display: block;
-    }
-    .pl-txt {
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-    .pl-name {
-      color: var(--accent);
-      font-weight: 700;
-      font-size: 0.98rem;
-      line-height: 1.2;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .pl-meta {
-      font-size: 0.82rem;
-      color: var(--accent-dim);
-    }
-  `,
+  styleUrl: './track-card.component.css',
 })
 export class TrackCardComponent {
+  /**
+   * One size for every icon in the action row. Icons ship with different
+   * natural sizes (16/20/24 grids), so without this the row rendered mixed
+   * glyph sizes and baselines.
+   */
+  protected readonly ACTION_ICON_SIZE = 18;
+
   private readonly api = inject(ApiService);
   readonly artistLookup = inject(ArtistLookupService);
   private readonly playerService = inject(PlayerService);
@@ -840,7 +395,10 @@ export class TrackCardComponent {
 
   onCardClick(event: MouseEvent): void {
     const target = event.target as HTMLElement | null;
-    if (target?.closest('button, input, textarea, select, a')) {
+    // The tag strip and the expanded tag panel live inside the clickable card
+    // but are not the play trigger; listing them here keeps them out of the way
+    // without putting a no-op click handler on non-interactive elements.
+    if (target?.closest('button, input, textarea, select, a, .tags-line, .tag-panel')) {
       return;
     }
     this.onPlay();

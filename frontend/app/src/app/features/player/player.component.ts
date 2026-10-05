@@ -1,5 +1,4 @@
 import { CommonModule } from '@angular/common';
-import { HttpErrorResponse } from '@angular/common/http';
 import {
   Component,
   computed,
@@ -9,41 +8,34 @@ import {
   inject,
   signal,
   viewChild,
-  viewChildren,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { FormsModule } from '@angular/forms';
-import { NavigationEnd, Router, RouterLink } from '@angular/router';
-import { catchError, filter, forkJoin, map, of } from 'rxjs';
+import { NavigationEnd, Router } from '@angular/router';
+import { filter } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
 import { ArtistLookupService } from '../../core/services/artist-lookup.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ListenHistoryCacheService } from '../../core/services/listen-history-cache.service';
-import {
-  PlayerService,
-  type PlayerTrack,
-  type QueueSource,
-} from '../../core/services/player.service';
+import { PlayerService, type PlayerTrack } from '../../core/services/player.service';
+import { ClipComposerComponent } from './clip-composer/clip-composer.component';
+import { QueueSheetComponent } from './queue-sheet/queue-sheet.component';
 import { IconComponent } from '../../shared/components/icon/icon.component';
 import { ThumbComponent } from '../../shared/components/thumb/thumb.component';
 import { formatDurationClock, normalizeDurationSeconds } from '../../shared/utils/duration.util';
-import { ModalComponent } from '../../shared/components/modal/modal.component';
 import { TranslatePipe } from '../../shared/pipes/t.pipe';
 import { AppSettingsService } from '../../core/services/app-settings.service';
 import { ToastService } from '../../core/services/toast.service';
-import { buildPlaylistPreview, type PlaylistRow } from '../../shared/utils/playlist-preview.util';
 
 @Component({
   selector: 'app-player',
   standalone: true,
   imports: [
+    ClipComposerComponent,
     CommonModule,
-    FormsModule,
-    ModalComponent,
-    RouterLink,
-    TranslatePipe,
-    ThumbComponent,
     IconComponent,
+    QueueSheetComponent,
+    ThumbComponent,
+    TranslatePipe,
   ],
   template: `
     <audio
@@ -55,12 +47,16 @@ import { buildPlaylistPreview, type PlaylistRow } from '../../shared/utils/playl
     ></audio>
 
     @if (track(); as t) {
-      <div
-        class="player-shell"
-        [class.sheet-expanded]="isExpanded()"
-        [class.queue-reordering]="!!queueReorderTrackId()"
-      >
-        <div class="player-scrim" [class.open]="isExpanded()" (click)="closeQueueSheet()"></div>
+      <div class="player-shell" [class.sheet-expanded]="isExpanded()">
+        <div
+          class="player-scrim"
+          role="button"
+          tabindex="0"
+          aria-label="closePlayer"
+          [class.open]="isExpanded()"
+          (click)="closeQueueSheet()"
+          (keydown.escape)="closeQueueSheet()"
+        ></div>
         <div class="player" [class.dragging]="isDragging()" [style.transform]="sheetTransform()">
           <div class="player-bar">
             <div class="zone left">
@@ -82,7 +78,14 @@ import { buildPlaylistPreview, type PlaylistRow } from '../../shared/utils/playl
               </div>
             </div>
 
-            <div class="zone center" (click)="onCenterZoneClick($event)">
+            <div
+              class="zone center"
+              role="button"
+              tabindex="0"
+              aria-label="expandPlayer"
+              (click)="onCenterZoneClick($event)"
+              (keydown.enter)="toggleExpanded()"
+            >
               <div
                 class="drag-zone"
                 (mousedown)="onDragStart($event)"
@@ -118,7 +121,17 @@ import { buildPlaylistPreview, type PlaylistRow } from '../../shared/utils/playl
               </div>
               <div class="progress-row">
                 <span class="time">{{ formatTime(currentSec()) }}</span>
-                <div class="bar-wrap" (click)="onBarClick($event)">
+                <div
+                  class="bar-wrap"
+                  role="slider"
+                  tabindex="0"
+                  aria-label="seek"
+                  aria-valuemin="0"
+                  [attr.aria-valuenow]="currentSec()"
+                  (click)="onBarClick($event)"
+                  (keydown.arrowleft)="nudgeSeek(-5)"
+                  (keydown.arrowright)="nudgeSeek(5)"
+                >
                   <div class="bar-bg">
                     <div class="bar-fill" [style.width.%]="progress()"></div>
                     <div class="bar-knob" [style.left.%]="progress()"></div>
@@ -155,844 +168,22 @@ import { buildPlaylistPreview, type PlaylistRow } from '../../shared/utils/playl
             </div>
           </div>
 
-          <div class="queue-sheet">
-            <div class="queue-head">
-              <h3>{{ 'queue' | t }}</h3>
-              <p>{{ queue().length }} {{ 'tracksSuffix' | t }}</p>
-            </div>
-            <div class="queue-list">
-              @for (q of queue(); track q.trackId; let idx = $index) {
-                <div
-                  class="queue-row-wrap"
-                  #queueRowWrap
-                  [class.dragging-row]="queueReorderTrackId() === q.trackId"
-                  [class.queue-row-wrap--current]="q.trackId === t.trackId"
-                >
-                  <button
-                    type="button"
-                    class="queue-grip tap"
-                    (mousedown)="onQueueGripMouseDown($event, idx)"
-                    title="Reorder"
-                    aria-label="Reorder in queue"
-                  >
-                    <svg
-                      class="grip-svg"
-                      viewBox="0 0 12 20"
-                      aria-hidden="true"
-                      fill="currentColor"
-                    >
-                      <circle cx="3.5" cy="4.5" r="1.2" />
-                      <circle cx="8.5" cy="4.5" r="1.2" />
-                      <circle cx="3.5" cy="10.5" r="1.2" />
-                      <circle cx="8.5" cy="10.5" r="1.2" />
-                      <circle cx="3.5" cy="16.5" r="1.2" />
-                      <circle cx="8.5" cy="16.5" r="1.2" />
-                    </svg>
-                  </button>
-                  <button type="button" class="queue-row" (click)="playFromQueue(q)">
-                    <div class="queue-thumb">
-                      <app-thumb [src]="q.thumbnailUrl" [alt]="q.title" variant="queue" />
-                    </div>
-                    <div class="queue-meta">
-                      <div class="queue-title">
-                        {{ q.title }}
-                        @if (q.trackId === t.trackId && playing()) {
-                          <div class="eq" aria-hidden="true">
-                            <span></span><span></span><span></span>
-                          </div>
-                        }
-                      </div>
-                      <div class="queue-artist-row">
-                        <div class="queue-artist">{{ q.artist }}</div>
-                        @if (queueSource() !== 'history' && q.duration != null) {
-                          <span class="queue-dur">{{ formatTime(q.duration) }}</span>
-                        }
-                      </div>
-                    </div>
-                  </button>
-                </div>
-              }
-            </div>
-          </div>
+          <app-queue-sheet [currentTrackId]="t.trackId" [playing]="playing()" />
         </div>
       </div>
     }
 
-    <app-modal [title]="'createClip' | t" [isOpen]="clipOpen()" (closed)="closeClip()">
-      @if (track(); as t) {
-        <p class="clip-preview">
-          {{ formatTime(clipStart()) }} — {{ formatTime(clipEnd()) }} ·
-          {{ formatTime(Math.max(0, clipEnd() - clipStart())) }}
-        </p>
-        <label class="rng-lab">
-          <span>{{ 'clipName' | t }}</span>
-          <input
-            type="text"
-            class="clip-name-input"
-            [ngModel]="clipName()"
-            (ngModelChange)="clipName.set(($event ?? '').toString())"
-            [placeholder]="'clipNamePlaceholder' | t"
-          />
-        </label>
-        <label class="rng-lab">
-          <span>{{ 'startSeconds' | t }}</span>
-          <input
-            type="range"
-            [min]="0"
-            [max]="clipMax()"
-            [step]="1"
-            [ngModel]="clipStart()"
-            (ngModelChange)="onClipStartChange($event)"
-          />
-        </label>
-        <label class="rng-lab">
-          <span>{{ 'endSeconds' | t }}</span>
-          <input
-            type="range"
-            [min]="0"
-            [max]="clipMax()"
-            [step]="1"
-            [ngModel]="clipEnd()"
-            (ngModelChange)="onClipEndChange($event)"
-          />
-        </label>
-        @if (clipError()) {
-          <p class="error-text err">{{ clipError() }}</p>
-        }
-        @if (clipResult(); as cr) {
-          <p class="ok">{{ 'clipReady' | t }}</p>
-          <a class="link" [routerLink]="['/clip', cr]">Open /clip/{{ cr }}</a>
-          <button type="button" class="copy tap" (click)="copyClip(cr)">
-            {{ 'copyLink' | t }}
-          </button>
-          <div class="pl-create">
-            <input
-              type="text"
-              class="pl-inp"
-              [(ngModel)]="newPlaylistName"
-              [placeholder]="'newPlaylistNamePlaceholder' | t"
-              (keydown.enter)="createPlaylistAndAddClip()"
-            />
-            <button
-              type="button"
-              class="pl-create-btn tap"
-              [disabled]="creatingPlaylist() || !newPlaylistName.trim()"
-              (click)="createPlaylistAndAddClip()"
-            >
-              {{ 'create' | t }}
-            </button>
-          </div>
-          @if (loadingLists()) {
-            <p class="ok">{{ 'loading' | t }}</p>
-          } @else if (playlists().length > 0) {
-            <div class="pl-list" role="list">
-              @for (p of playlists(); track p.id) {
-                <button type="button" class="pl-row tap" (click)="addClipToPlaylist(p.id)">
-                  <div class="pl-prev" aria-hidden="true">
-                    @if (p.preview.kind === 'mosaic') {
-                      <div class="pl-mosaic">
-                        @for (u of p.preview.urls; track u) {
-                          <img class="pl-mosaic-img" [src]="u" alt="" loading="lazy" />
-                        }
-                      </div>
-                    } @else {
-                      @if (p.preview.url) {
-                        <img class="pl-cover" [src]="p.preview.url" alt="" loading="lazy" />
-                      } @else {
-                        <div class="pl-cover ph" aria-hidden="true"></div>
-                      }
-                    }
-                  </div>
-                  <div class="pl-txt">
-                    <div class="pl-name">{{ p.name }}</div>
-                    <div class="pl-meta">{{ p.trackCount }} {{ 'tracksSuffix' | t }}</div>
-                  </div>
-                  @if (clipAddedPlaylistId() === p.id) {
-                    <span class="pl-added">{{ 'clipAddedToPlaylist' | t }}</span>
-                  }
-                </button>
-              }
-            </div>
-          }
-        } @else {
-          <button type="button" class="copy tap" [disabled]="clipSaving()" (click)="previewClip()">
-            {{ clipPreviewPlaying() ? ('pause' | t) : ('previewClip' | t) }}
-          </button>
-          <button type="button" class="create tap" [disabled]="clipSaving()" (click)="createClip()">
-            {{ 'create' | t }}
-          </button>
-        }
-      }
-    </app-modal>
-  `,
-  styles: `
-    :host {
-      display: block;
-    }
-    audio {
-      display: none;
-    }
-    .player-shell {
-      position: fixed;
-      bottom: 10px;
-      left: 240px;
-      right: 0;
-      top: 0;
-      z-index: 30;
-      pointer-events: none;
-    }
-    .player-shell.sheet-expanded {
-      bottom: 0;
-    }
-    .player-scrim {
-      position: absolute;
-      inset: 0;
-      background: var(--scrim-bg);
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.24s ease;
-    }
-    .player-scrim.open {
-      opacity: 1;
-      pointer-events: auto;
-    }
-    .player {
-      position: absolute;
-      inset: 0;
-      pointer-events: auto;
-      display: grid;
-      background: var(--bg-card);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border-top: 1px solid var(--border);
-      border-radius: 14px 14px 0 0;
-      grid-template-rows: 112px minmax(0, 1fr);
-      transition: transform 0.3s ease;
-      will-change: transform;
-      overflow: hidden;
-    }
-    .player.dragging {
-      transition: none;
-    }
-    .drag-zone {
-      width: 70px;
-      height: 12px;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      cursor: ns-resize;
-      user-select: none;
-    }
-    .drag-pill {
-      width: 54px;
-      height: 4px;
-      border-radius: 999px;
-      background: var(--accent-dim);
-      opacity: 0.8;
-    }
-    .player-bar {
-      display: grid;
-      grid-template-columns: minmax(300px, 380px) 1fr 200px;
-      align-items: center;
-      height: 112px;
-      padding: 10px 0 16px;
-    }
-    .zone {
-      display: flex;
-      align-items: center;
-      min-width: 0;
-      height: 100%;
-    }
-    .left {
-      gap: 14px;
-      padding-left: 24px;
-      min-width: 0;
-      align-self: center;
-      flex-shrink: 1;
-      max-width: 380px;
-    }
-    .meta {
-      min-width: 0;
-      flex: 1;
-      max-width: 280px;
-      display: flex;
-      flex-direction: column;
-    }
-    .thumb-wrap {
-      width: 72px;
-      height: 72px;
-      border-radius: 8px;
-      overflow: hidden;
-      flex-shrink: 0;
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
-    }
-    .thumb-wrap img {
-      width: 72px;
-      height: 72px;
-      object-fit: cover;
-      display: block;
-    }
-    .thumb-ph {
-      width: 72px;
-      height: 72px;
-    }
-    .meta {
-      min-width: 0;
-    }
-    .t-title {
-      font-size: 16px;
-      font-weight: 600;
-      color: var(--accent);
-      max-width: 280px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      line-height: 1.25;
-    }
-    .t-artist-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-top: 2px;
-    }
-    .t-artist {
-      display: inline-block;
-      max-width: 200px;
-      border: none;
-      background: transparent;
-      padding: 0;
-      cursor: pointer;
-      text-align: left;
-      font-size: 14px;
-      color: var(--accent-dim);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      text-decoration: none;
-      transition: color 0.2s ease;
-    }
-    .t-artist:hover {
-      color: var(--accent);
-      text-decoration: underline;
-    }
-    .t-artist:focus-visible {
-      color: var(--accent);
-      text-decoration: underline;
-      outline: none;
-    }
-    .t-dur {
-      font-size: 14px;
-      color: var(--accent-dim);
-      font-variant-numeric: tabular-nums;
-      flex-shrink: 0;
-    }
-    .center {
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      gap: 8px;
-      min-width: 280px;
-      padding: 0 24px;
-      align-self: center;
-    }
-    .btns {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 36px;
-    }
-    .ico-prev {
-      width: 22px;
-      height: 22px;
-      display: block;
-    }
-    .ico-play {
-      width: 32px;
-      height: 32px;
-      display: block;
-    }
-    .ico-clip {
-      width: 20px;
-      height: 20px;
-      display: block;
-    }
-    .ctrl {
-      width: auto;
-      height: auto;
-      border: none;
-      background: transparent;
-      cursor: pointer;
-      padding: 4px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--accent);
-      transition:
-        transform 0.12s ease,
-        opacity 0.2s ease;
-    }
-    .ctrl:hover {
-      opacity: 0.85;
-    }
-    .ctrl.tap:active {
-      transform: scale(0.9);
-    }
-    .ctrl.main {
-      padding: 8px;
-    }
-    .progress-row {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      width: min(560px, 100%);
-      transform: translateY(-10px);
-    }
-    .progress-row .time {
-      font-size: 13px;
-      color: var(--accent-dim);
-      flex-shrink: 0;
-      min-width: 42px;
-      font-variant-numeric: tabular-nums;
-    }
-    .progress-row .time:last-child {
-      text-align: right;
-    }
-    .bar-wrap {
-      flex: 1;
-      cursor: pointer;
-      padding: 10px 0;
-    }
-    .bar-bg {
-      position: relative;
-      height: 8px;
-      background: var(--border);
-      border-radius: 4px;
-    }
-    .bar-fill {
-      height: 100%;
-      background: var(--accent);
-      border-radius: 4px;
-      transition: width 0.05s linear;
-    }
-    .bar-knob {
-      position: absolute;
-      top: 50%;
-      width: 14px;
-      height: 14px;
-      margin-left: -7px;
-      border-radius: 50%;
-      background: var(--accent);
-      box-shadow: 0 2px 6px var(--bar-knob-shadow);
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.15s ease;
-      transform: translateY(-50%);
-    }
-    .bar-wrap:hover .bar-knob {
-      opacity: 1;
-    }
-    .right {
-      justify-content: flex-end;
-      padding-right: 24px;
-      align-self: center;
-    }
-    .queue-sheet {
-      border-top: 1px solid var(--border);
-      padding: 14px 18px 18px;
-      /* Grid row is minmax(0, 1fr); need min-height + overflow so inner scroll works with many tracks */
-      min-height: 0;
-      overflow: hidden;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-    .queue-head {
-      flex-shrink: 0;
-    }
-    .queue-head h3 {
-      font-size: 1.05rem;
-      font-weight: 700;
-      margin-bottom: 2px;
-    }
-    .queue-head p {
-      font-size: 0.86rem;
-      color: var(--accent-dim);
-    }
-    .queue-list {
-      flex: 1 1 0%;
-      min-height: 0;
-      overflow-x: hidden;
-      overflow-y: auto;
-      padding-right: 4px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      overscroll-behavior: contain;
-    }
-    .player-shell.queue-reordering .queue-list {
-      cursor: grabbing;
-    }
-    .queue-row-wrap {
-      flex-shrink: 0;
-      display: flex;
-      align-items: stretch;
-      width: 100%;
-      gap: 0;
-      border-radius: 12px;
-      overflow: hidden;
-      border: 1px solid var(--border);
-      background: transparent;
-      transition:
-        opacity 0.2s ease,
-        border-color 0.22s ease,
-        box-shadow 0.22s ease;
-    }
-    .queue-row-wrap:hover {
-      border-color: var(--accent-dim);
-    }
-    .queue-row-wrap.queue-row-wrap--current {
-      border-color: var(--accent-dim);
-    }
-    .queue-row-wrap.dragging-row {
-      border-color: rgba(255, 255, 255, 0.2);
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-      opacity: 0.97;
-    }
-    .queue-grip {
-      flex-shrink: 0;
-      width: 38px;
-      border: none;
-      background: var(--overlay-panel-bg);
-      color: var(--accent-dim);
-      display: grid;
-      place-items: center;
-      cursor: grab;
-      transition:
-        background 0.22s ease,
-        color 0.22s ease;
-    }
-    .queue-grip:hover {
-      background: var(--overlay-panel-bg-strong);
-      color: var(--accent);
-    }
-    .player-shell.queue-reordering .queue-grip {
-      cursor: grabbing;
-      color: var(--accent);
-      background: var(--overlay-panel-bg-strong);
-    }
-    .queue-grip .grip-svg {
-      width: 12px;
-      height: 20px;
-      display: block;
-    }
-    .queue-grip.tap:active:not(:disabled) {
-      transform: scale(0.92);
-    }
-    .queue-row {
-      border: none;
-      background: var(--bg);
-      flex: 1;
-      border-radius: 0;
-      min-width: 0;
-      min-height: 62px;
-      padding: 8px 10px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      cursor: pointer;
-      text-align: left;
-      color: var(--accent);
-    }
-    .queue-row:hover {
-      background: var(--bg-hover);
-    }
-    .queue-row-wrap--current .queue-row {
-      background: var(--bg-hover);
-    }
-    .queue-thumb {
-      width: 44px;
-      height: 44px;
-      border-radius: 8px;
-      overflow: hidden;
-      flex-shrink: 0;
-      background: var(--bg-hover);
-    }
-    .queue-thumb img,
-    .queue-meta {
-      min-width: 0;
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-    }
-    .queue-title {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 0.92rem;
-      font-weight: 600;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .queue-artist-row {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      margin-top: 2px;
-    }
-    .queue-artist {
-      font-size: 0.82rem;
-      color: var(--accent-dim);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .queue-dur {
-      font-size: 0.82rem;
-      color: var(--accent-dim);
-      font-variant-numeric: tabular-nums;
-      flex-shrink: 0;
-      display: inline;
-    }
-    .eq {
-      display: inline-flex;
-      align-items: flex-end;
-      gap: 2px;
-      width: 14px;
-      height: 12px;
-      flex-shrink: 0;
-    }
-    .eq span {
-      width: 3px;
-      border-radius: 999px;
-      background: var(--accent);
-      transform-origin: bottom;
-      animation: eq-wave 850ms ease-in-out infinite;
-    }
-    .eq span:nth-child(1) {
-      height: 45%;
-      animation-delay: 0ms;
-    }
-    .eq span:nth-child(2) {
-      height: 75%;
-      animation-delay: 140ms;
-    }
-    .eq span:nth-child(3) {
-      height: 60%;
-      animation-delay: 260ms;
-    }
-    @keyframes eq-wave {
-      0%,
-      100% {
-        transform: scaleY(0.35);
-        opacity: 0.85;
-      }
-      50% {
-        transform: scaleY(1);
-        opacity: 1;
-      }
-    }
-    .clip-btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      padding: 10px 16px;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      background: transparent;
-      cursor: pointer;
-      color: var(--accent-dim);
-      font-size: 14px;
-      transition:
-        color 0.2s ease,
-        border-color 0.2s ease,
-        background 0.2s ease;
-    }
-    .clip-btn:hover:not(:disabled) {
-      color: var(--accent);
-      border-color: var(--accent-dim);
-      background: var(--overlay-panel-bg-strong);
-    }
-    .clip-btn:disabled {
-      opacity: 0.4;
-      cursor: not-allowed;
-    }
-    .clip-btn.tap:active:not(:disabled) {
-      transform: scale(0.95);
-    }
-    .clip-btn:hover:not(:disabled) {
-      color: var(--accent);
-      border-color: var(--accent-dim);
-      background: var(--overlay-panel-bg-strong);
-    }
-    .clip-btn:disabled {
-      opacity: 0.4;
-      cursor: not-allowed;
-    }
-    .clip-btn.tap:active:not(:disabled) {
-      transform: scale(0.92);
-    }
-    .clip-preview {
-      margin-bottom: 1rem;
-      font-size: 14px;
-      color: var(--accent-dim);
-    }
-    .rng-lab {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      margin-bottom: 1rem;
-      font-size: 13px;
-      color: var(--accent-dim);
-    }
-    .rng-lab input {
-      width: 100%;
-      accent-color: var(--accent);
-    }
-    .create,
-    .copy {
-      margin-top: 1rem;
-      width: 100%;
-      padding: 12px 16px;
-      border-radius: 8px;
-      border: none;
-      background: var(--accent);
-      color: var(--bg);
-      font-weight: 600;
-      font-size: 14px;
-      cursor: pointer;
-    }
-    .copy {
-      margin-top: 12px;
-      background: transparent;
-      color: var(--accent);
-      border: 1px solid var(--border);
-    }
-    .err {
-      margin-top: var(--sp-2);
-    }
-    .ok {
-      color: var(--accent-dim);
-      font-size: 13px;
-      margin-top: 8px;
-    }
-    .link {
-      display: inline-block;
-      margin-top: 8px;
-      color: var(--accent);
-      text-decoration: underline;
-      font-size: 14px;
-    }
-    .clip-name-input {
-      width: 100%;
-      padding: 10px 12px;
-      border-radius: 10px;
-      border: 1px solid var(--border);
-      background: var(--bg);
-      color: var(--text, #fff);
-      font-size: 14px;
-    }
-    .pl-create {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      margin-top: 12px;
-    }
-    .pl-inp {
-      flex: 1;
-      padding: 10px 12px;
-      border-radius: 10px;
-      border: 1px solid var(--border);
-      background: var(--bg);
-      color: var(--text, #fff);
-      font-size: 14px;
-      min-width: 0;
-    }
-    .pl-create-btn {
-      flex-shrink: 0;
-      padding: 10px 14px;
-      border-radius: 10px;
-      border: 1px solid var(--border);
-      background: var(--accent);
-      color: var(--bg);
-      font-size: 13px;
-      cursor: pointer;
-    }
-    .pl-list {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      max-height: 220px;
-      overflow-y: auto;
-      margin-top: 12px;
-    }
-    .pl-row {
-      width: 100%;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      text-align: left;
-      padding: 10px;
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      background: var(--bg-card);
-      color: inherit;
-      cursor: pointer;
-    }
-    .pl-prev {
-      width: 44px;
-      height: 44px;
-      border-radius: 10px;
-      overflow: hidden;
-      border: 1px solid var(--border);
-      background: var(--bg);
-      flex-shrink: 0;
-    }
-    .pl-cover {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      display: block;
-    }
-    .pl-cover.ph {
-      width: 100%;
-      height: 100%;
-      background: var(--bg-hover);
-    }
-    .pl-mosaic {
-      width: 100%;
-      height: 100%;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      grid-template-rows: 1fr 1fr;
-      gap: 2px;
-      background: var(--overlay-chip-bg);
-    }
-    .pl-mosaic-img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      display: block;
-    }
-    .pl-txt {
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      flex: 1;
-    }
-    .pl-name {
-      color: var(--accent);
-      font-weight: 700;
-      font-size: 0.95rem;
-      line-height: 1.2;
-    }
-    .pl-meta,
-    .pl-added {
-      font-size: 0.78rem;
-      color: var(--accent-dim);
+    @if (clipOpen() && track(); as t) {
+      <app-clip-composer
+        [track]="t"
+        [maxSec]="clipMaxSec()"
+        [previewPlaying]="clipPreviewPlaying()"
+        (closed)="closeClip()"
+        (preview)="previewClip($event)"
+      />
     }
   `,
+  styleUrl: './player.component.css',
 })
 export class PlayerComponent {
   readonly player = inject(PlayerService);
@@ -1005,14 +196,9 @@ export class PlayerComponent {
   private readonly toast = inject(ToastService);
 
   readonly audioRef = viewChild<ElementRef<HTMLAudioElement>>('audioRef');
-  readonly queueRowWraps = viewChildren<ElementRef<HTMLElement>>('queueRowWrap');
 
   readonly track = toSignal(this.player.currentTrack$, { initialValue: null });
   readonly playing = toSignal(this.player.isPlaying$, { initialValue: false });
-  readonly queue = toSignal(this.player.queue$, { initialValue: [] as PlayerTrack[] });
-  readonly queueSource = toSignal(this.player.queueSource$, {
-    initialValue: 'unknown' as QueueSource,
-  });
 
   readonly progress = signal(0);
   readonly currentSec = signal(0);
@@ -1021,8 +207,6 @@ export class PlayerComponent {
   readonly isDragging = signal(false);
   readonly dragOffset = signal(0);
   readonly viewportHeight = signal(typeof window !== 'undefined' ? window.innerHeight : 1080);
-  /** While non-null, dragging to reorder queue rows (by trackId of grabbed row). */
-  readonly queueReorderTrackId = signal<string | null>(null);
 
   private clipEnforceTimer: ReturnType<typeof setInterval> | null = null;
   private pendingClipStartTime: number | null = null;
@@ -1050,21 +234,11 @@ export class PlayerComponent {
   });
 
   readonly clipOpen = signal(false);
-  readonly clipStart = signal(0);
-  readonly clipEnd = signal(30);
-  readonly clipMax = signal(180);
-  readonly clipSaving = signal(false);
-  readonly clipError = signal('');
-  readonly clipResult = signal<string | null>(null);
-  readonly clipName = signal('');
+  /** Last seekable second of the current track; passed to the clip composer. */
+  readonly clipMaxSec = signal(0);
   readonly clipPreviewPlaying = signal(false);
-  readonly loadingLists = signal(false);
-  readonly creatingPlaylist = signal(false);
-  readonly playlists = signal<PlaylistRow[]>([]);
-  readonly clipAddedPlaylistId = signal<number | null>(null);
-  newPlaylistName = '';
-
-  protected readonly Math = Math;
+  /** Non-null while previewing a clip excerpt; bounds the previewed range. */
+  readonly previewWindow = signal<{ start: number; end: number } | null>(null);
 
   private historyLoggedFor: string | null = null;
   private dragStartY = 0;
@@ -1217,10 +391,6 @@ export class PlayerComponent {
 
   @HostListener('window:mousemove', ['$event'])
   onWindowMousemove(ev: MouseEvent): void {
-    if (this.queueReorderTrackId() !== null) {
-      this.handleQueueReorderPointerMove(ev.clientY);
-      return;
-    }
     if (!this.isDragging()) {
       return;
     }
@@ -1233,10 +403,6 @@ export class PlayerComponent {
 
   @HostListener('window:mouseup')
   onWindowMouseup(): void {
-    if (this.queueReorderTrackId() !== null) {
-      this.finishQueueReorder();
-      return;
-    }
     if (!this.isDragging()) {
       return;
     }
@@ -1271,84 +437,15 @@ export class PlayerComponent {
     this.isExpanded.update((v) => !v);
   }
 
+  /** Keyboard equivalent of tapping the centre zone to expand/collapse the player. */
+  toggleExpanded(): void {
+    this.isExpanded.update((v) => !v);
+  }
+
   closeQueueSheet(): void {
     this.isExpanded.set(false);
     this.isDragging.set(false);
     this.dragOffset.set(0);
-  }
-
-  playFromQueue(track: PlayerTrack): void {
-    this.player.play(track);
-  }
-
-  onQueueGripMouseDown(ev: MouseEvent, startIndex: number): void {
-    if (ev.button !== 0) {
-      return;
-    }
-    const list = this.queue();
-    const row = list[startIndex];
-    if (!row) {
-      return;
-    }
-    ev.preventDefault();
-    ev.stopPropagation();
-    this.queueReorderTrackId.set(row.trackId);
-    document.body.style.userSelect = 'none';
-    this.handleQueueReorderPointerMove(ev.clientY);
-  }
-
-  private handleQueueReorderPointerMove(clientY: number): void {
-    const tid = this.queueReorderTrackId();
-    if (!tid) {
-      return;
-    }
-    const q = this.queue();
-    const wraps = this.queueRowWraps();
-    if (!q.length || !wraps.length) {
-      return;
-    }
-    const rows = wraps.map((r) => r.nativeElement);
-    const targetIdx = this.queueInsertIndexFromPointerY(clientY, rows);
-
-    const fromIdx = q.findIndex((t) => t.trackId === tid);
-    if (fromIdx < 0) {
-      this.finishQueueReorder();
-      return;
-    }
-    if (fromIdx !== targetIdx) {
-      this.player.moveQueueItem(fromIdx, targetIdx);
-    }
-  }
-
-  /** Row index whose vertical midpoint cursor is inside (drops before midpoint at i). */
-  private queueInsertIndexFromPointerY(y: number, rows: HTMLElement[]): number {
-    if (rows.length === 0) {
-      return 0;
-    }
-    const firstRect = rows[0]!.getBoundingClientRect();
-    if (y < firstRect.top + firstRect.height / 2) {
-      return 0;
-    }
-    const lastRect = rows[rows.length - 1]!.getBoundingClientRect();
-    if (y >= lastRect.top + lastRect.height / 2) {
-      return rows.length - 1;
-    }
-    for (let i = 0; i < rows.length; i += 1) {
-      const rect = rows[i]!.getBoundingClientRect();
-      const mid = rect.top + rect.height / 2;
-      if (y < mid) {
-        return i;
-      }
-    }
-    return rows.length - 1;
-  }
-
-  private finishQueueReorder(): void {
-    if (this.queueReorderTrackId() === null) {
-      return;
-    }
-    this.queueReorderTrackId.set(null);
-    document.body.style.userSelect = '';
   }
 
   onTimeUpdate(): void {
@@ -1383,10 +480,11 @@ export class PlayerComponent {
     this.currentSec.set(curSec);
     this.totalSec.set(totSec);
 
-    if (this.clipOpen() && this.clipPreviewPlaying() && el.currentTime >= this.clipEnd()) {
+    const preview = this.previewWindow();
+    if (preview && this.clipPreviewPlaying() && el.currentTime >= preview.end) {
       el.pause();
       this.clipPreviewPlaying.set(false);
-      el.currentTime = this.clipStart();
+      el.currentTime = preview.start;
     }
   }
 
@@ -1491,6 +589,14 @@ export class PlayerComponent {
     this.player.resume();
   }
 
+  /** Keyboard equivalent of dragging the progress bar: arrow keys nudge the playhead. */
+  nudgeSeek(deltaSec: number): void {
+    const ref = this.audioRef();
+    const el = ref?.nativeElement as HTMLAudioElement | undefined;
+    if (!el || !isFinite(el.duration) || el.duration <= 0) return;
+    el.currentTime = Math.max(0, Math.min(el.duration, el.currentTime + deltaSec));
+  }
+
   onBarClick(ev: MouseEvent): void {
     const ref = this.audioRef();
     if (!ref) return;
@@ -1520,201 +626,46 @@ export class PlayerComponent {
   }
 
   openClip(): void {
-    if (this.isClipTrack()) return;
+    if (this.isClipTrack()) {
+      return;
+    }
     const t = this.track();
-    if (!t) return;
-    const fallbackDuration = normalizeDurationSeconds(t.duration) ?? 180;
-    const max = Math.max(1, Math.floor(this.totalSec() || fallbackDuration));
-    this.clipMax.set(max);
-    this.clipStart.set(0);
-    this.clipEnd.set(Math.min(30, max));
-    this.clipError.set('');
-    this.clipResult.set(null);
-    this.clipName.set(t.title);
-    this.newPlaylistName = '';
-    this.clipAddedPlaylistId.set(null);
-    this.clipPreviewPlaying.set(false);
+    if (!t) {
+      return;
+    }
+    const fallback = normalizeDurationSeconds(t.duration) ?? 180;
+    this.clipMaxSec.set(Math.max(1, Math.floor(this.totalSec() || fallback)));
     this.clipOpen.set(true);
-    this.loadPlaylistsForModal();
   }
 
   closeClip(): void {
-    this.clipPreviewPlaying.set(false);
+    this.stopClipPreview();
+    this.previewWindow.set(null);
     this.clipOpen.set(false);
   }
 
-  onClipStartChange(v: number): void {
-    const max = this.clipMax();
-    const end = this.clipEnd();
-    const start = Math.max(0, Math.min(max, Math.floor(v)));
-    this.clipStart.set(start);
-    if (start >= end) this.clipEnd.set(Math.min(max, start + 1));
-  }
-
-  onClipEndChange(v: number): void {
-    const max = this.clipMax();
-    const start = this.clipStart();
-    const end = Math.max(0, Math.min(max, Math.floor(v)));
-    this.clipEnd.set(end);
-    if (end <= start) this.clipStart.set(Math.max(0, end - 1));
-  }
-
-  createClip(): void {
-    const t = this.track();
-    if (!t) return;
-    const start = this.clipStart();
-    const end = this.clipEnd();
-    const clipName = this.clipName().trim();
-    if (end <= start) {
-      this.clipError.set(this.settings.t('endMustBeGreater'));
-      return;
-    }
-    if (!clipName) {
-      this.clipError.set(this.settings.t('clipNameRequired'));
-      return;
-    }
-    this.clipError.set('');
-    this.clipSaving.set(true);
-    this.api
-      .post<{ shortCode: string }>('clips', {
-        trackId: t.trackId,
-        title: t.title,
-        clipName,
-        artist: t.artist,
-        thumbnailUrl: '/clip-cover.svg',
-        startTime: start,
-        endTime: end,
-      })
-      .subscribe({
-        next: (res) => {
-          this.clipResult.set(res.shortCode);
-          this.clipSaving.set(false);
-        },
-        error: () => {
-          this.clipError.set(this.settings.t('failedCreateClip'));
-          this.clipSaving.set(false);
-        },
-      });
-  }
-
-  copyClip(code: string): void {
-    const url = `${window.location.origin}/clip/${code}`;
-    void navigator.clipboard.writeText(url);
-  }
-
-  previewClip(): void {
+  /** Toggles preview of the composer's selected range on the shared <audio>. */
+  previewClip(range: { start: number; end: number }): void {
     const ref = this.audioRef();
-    if (!ref) return;
+    if (!ref) {
+      return;
+    }
     const el = ref.nativeElement;
     if (this.clipPreviewPlaying()) {
-      el.pause();
-      this.clipPreviewPlaying.set(false);
+      this.stopClipPreview();
       return;
     }
-    el.currentTime = this.clipStart();
+    const max = this.clipMaxSec();
+    const start = Math.max(0, Math.min(max - 1, Math.floor(range.start)));
+    const end = Math.max(start + 1, Math.min(max, Math.floor(range.end)));
+    this.previewWindow.set({ start, end });
+    el.currentTime = start;
     this.clipPreviewPlaying.set(true);
-    void el.play().catch(() => {
-      this.clipPreviewPlaying.set(false);
-    });
+    void el.play().catch(() => this.stopClipPreview());
   }
 
-  private loadPlaylistsForModal(): void {
-    this.loadingLists.set(true);
-    this.api.get<{ id: number; name: string; createdAt: string }[]>('playlists').subscribe({
-      next: (list) => {
-        if (list.length === 0) {
-          this.playlists.set([]);
-          this.loadingLists.set(false);
-          return;
-        }
-        forkJoin(
-          list.map((p) =>
-            this.api.get<{ thumbnailUrl: string | null }[]>(`playlists/${p.id}/tracks`).pipe(
-              map((tracks) => ({
-                id: p.id,
-                name: p.name,
-                trackCount: tracks.length,
-                preview: buildPlaylistPreview(tracks),
-              })),
-              catchError(() =>
-                of({
-                  id: p.id,
-                  name: p.name,
-                  trackCount: 0,
-                  preview: { kind: 'single' as const, url: null },
-                }),
-              ),
-            ),
-          ),
-        ).subscribe({
-          next: (rows) => {
-            this.playlists.set(rows);
-            this.loadingLists.set(false);
-          },
-          error: () => this.loadingLists.set(false),
-        });
-      },
-      error: () => this.loadingLists.set(false),
-    });
-  }
-
-  createPlaylistAndAddClip(): void {
-    const name = this.newPlaylistName.trim();
-    if (!name || this.creatingPlaylist()) return;
-    if (name.length > 25) {
-      this.toast.show(this.settings.t('playlistNameTooLong'));
-      return;
-    }
-    const normalizedName = name.toLowerCase();
-    const exists = this.playlists().some((p) => p.name.trim().toLowerCase() === normalizedName);
-    if (exists) {
-      this.toast.show(this.settings.t('playlistAlreadyExists'));
-      return;
-    }
-    this.creatingPlaylist.set(true);
-    this.api.post<{ id: number }>('playlists', { name }).subscribe({
-      next: (res) => {
-        if (!res?.id) {
-          this.creatingPlaylist.set(false);
-          return;
-        }
-        this.addClipToPlaylist(res.id, () => {
-          this.newPlaylistName = '';
-          this.creatingPlaylist.set(false);
-        });
-      },
-      error: () => this.creatingPlaylist.set(false),
-    });
-  }
-
-  addClipToPlaylist(playlistId: number, done?: () => void): void {
-    const t = this.track();
-    const code = this.clipResult();
-    if (!t || !code) {
-      done?.();
-      return;
-    }
-    this.api
-      .post(`playlists/${playlistId}/tracks`, {
-        trackId: `clip:${code}`,
-        title: this.clipName().trim(),
-        artist: t.artist,
-        thumbnailUrl: '/clip-cover.svg',
-        duration: Math.max(1, this.clipEnd() - this.clipStart()),
-        isClip: true,
-      })
-      .subscribe({
-        next: () => {
-          this.clipAddedPlaylistId.set(playlistId);
-          this.loadPlaylistsForModal();
-          done?.();
-        },
-        error: (err) => {
-          if (err instanceof HttpErrorResponse && err.status === 409) {
-            this.toast.show(this.settings.t('clipNameDuplicateInPlaylist'));
-          }
-          done?.();
-        },
-      });
+  private stopClipPreview(): void {
+    this.audioRef()?.nativeElement.pause();
+    this.clipPreviewPlaying.set(false);
   }
 }

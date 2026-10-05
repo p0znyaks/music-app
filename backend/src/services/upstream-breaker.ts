@@ -76,10 +76,3 @@ export const innertubeStreamBreaker = new UpstreamBreaker(
   envInt('INNERTUBE_BREAKER_FAILURES', 4),
   envInt('INNERTUBE_BREAKER_OPEN_MS', 45000),
 );
-
-/**
- * Albums and artists share the InnerTube search endpoint with tracks, so they
- * fail together. One breaker for all three keeps a track search from keeping a
- * separate album search hammering an upstream that is already refusing traffic.
- */
-export const innertubeCatalogBreaker = innertubeSearchBreaker;

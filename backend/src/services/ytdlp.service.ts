@@ -1,11 +1,28 @@
-import { AsyncSemaphore, envInt } from '../env';
+import { envInt } from '../env';
 import { createLogger } from '../logger';
-import { spawn } from 'child_process';
 import { redisGetSWR, stringifyEnvelope } from './cache-swr';
 import { getPythonPool } from './python-pool';
 import { getRedis } from './redis';
-import { normalizeDuration } from './track-media.service';
 import { innertubeSearchBreaker, innertubeStreamBreaker } from './upstream-breaker';
+import { runYtdlp, runYtdlpFlat } from './ytdlp/ytdlp-cli';
+import {
+  isYoutubeVideoId,
+  mapFullEntry,
+  normalizeQueryForCache,
+  parseJsonLines,
+  pickArtist,
+  pickThumbnail,
+} from './ytdlp/ytdlp-parse';
+import type { SearchBundle, SearchResult, TrackMetadata } from './ytdlp/ytdlp.types';
+import { normalizeDuration } from './track-media.service';
+
+export type {
+  SearchAlbumDto,
+  SearchArtistDto,
+  SearchBundle,
+  SearchResult,
+  TrackMetadata,
+} from './ytdlp/ytdlp.types';
 
 const log = createLogger('ytdlp');
 
@@ -38,43 +55,6 @@ const STREAM_SOFT_TTL_MS = (): number => {
   return Number.isFinite(n) && n > 0 ? n : 3 * 60 * 60 * 1000;
 };
 
-export interface SearchResult {
-  trackId: string;
-  title: string;
-  artist: string;
-  thumbnailUrl: string;
-  duration: number | string;
-  channelId?: string;
-}
-
-export interface SearchAlbumDto {
-  albumId: string;
-  title: string;
-  artist: string;
-  year: number | null;
-  thumbnailUrl: string;
-}
-
-export interface SearchArtistDto {
-  id: string;
-  name: string;
-  thumbnailUrl: string;
-}
-
-export interface SearchBundle {
-  tracks: SearchResult[];
-  albums: SearchAlbumDto[];
-  artists: SearchArtistDto[];
-}
-
-export interface TrackMetadata {
-  trackId: string;
-  title: string;
-  artist: string;
-  thumbnailUrl: string;
-  duration: number;
-}
-
 /**
  * YouTube itself refused to serve this track (region lock, removed video,
  * age gate, private/deleted). Retrying cannot help, so the API reports it as
@@ -98,189 +78,12 @@ function isPermanentPlayabilityFailure(error: string): boolean {
   return PERMANENT_PLAYABILITY_RE.test(error);
 }
 
-function ytdlpBinary(): string {
-  return process.env.YTDLP_PATH?.trim() || 'yt-dlp';
-}
-
-function ytdlpCookieFlags(): string[] {
-  const browser = process.env.YTDLP_COOKIES_BROWSER?.trim();
-  if (!browser) {
-    const cookiesFile = process.env.YTDLP_COOKIES_FILE?.trim();
-    if (cookiesFile) {
-      return ['--cookies', cookiesFile];
-    }
-    return [];
-  }
-  const configPath = process.env.YTDLP_BROWSER_CONFIG_PATH?.trim();
-  if (configPath) {
-    return ['--cookies-from-browser', browser, configPath];
-  }
-  return ['--cookies-from-browser', browser];
-}
-
-/**
- * Hard deadline for a yt-dlp invocation.
- *
- * Without one a stuck process (bot-check page, dead connection) holds the HTTP
- * request open indefinitely, so the player spins forever instead of falling
- * back. yt-dlp already retries internally for a while, which is why this is
- * generous compared to the InnerTube budget.
- */
-const YTDLP_TIMEOUT_MS = envInt('YTDLP_TIMEOUT_MS', 20000);
-
-/**
- * Caps how many yt-dlp processes may run at once.
- *
- * yt-dlp is the fallback, so it is exactly when a burst is most likely; without
- * a cap, N concurrent searches would spawn N Chromium-sized processes and
- * starve the rest of the container. Beyond the cap callers queue instead.
- */
-const ytdlpLimiter = new AsyncSemaphore(envInt('YTDLP_CONCURRENCY', 3));
-
-function runYtdlp(args: string[]): Promise<string> {
-  return ytdlpLimiter.use(() => spawnYtdlp(args));
-}
-
-function spawnYtdlp(args: string[]): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const bin = ytdlpBinary();
-    const allArgs = [...ytdlpCookieFlags(), ...args];
-    const proc = spawn(bin, allArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
-    let stdout = '';
-    let stderr = '';
-    let settled = false;
-
-    const timer = setTimeout(() => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      proc.kill('SIGKILL');
-      reject(new Error(`yt-dlp timed out after ${YTDLP_TIMEOUT_MS}ms`));
-    }, YTDLP_TIMEOUT_MS);
-
-    proc.stdout.setEncoding('utf8');
-    proc.stderr.setEncoding('utf8');
-    proc.stdout.on('data', (chunk: string) => {
-      stdout += chunk;
-    });
-    proc.stderr.on('data', (chunk: string) => {
-      stderr += chunk;
-    });
-    proc.on('error', (err) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timer);
-      reject(err);
-    });
-    proc.on('close', (code) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timer);
-      if (code !== 0) {
-        reject(new Error(stderr.trim() || `yt-dlp exited with code ${code}`));
-        return;
-      }
-      resolve(stdout);
-    });
-  });
-}
-
 function requirePythonPool() {
   const pool = getPythonPool();
   if (!pool) {
     throw new Error('Python worker pool is not available (set PYTHON_WORKERS>=1)');
   }
   return pool;
-}
-
-async function runYtdlpFlat(url: string, playlistEnd: number): Promise<string> {
-  return runYtdlp([
-    url,
-    '--dump-json',
-    '--flat-playlist',
-    '--playlist-end',
-    String(playlistEnd),
-    '--no-download',
-  ]);
-}
-
-function pickThumbnail(entry: Record<string, unknown>): string {
-  if (typeof entry.thumbnail === 'string' && entry.thumbnail) {
-    return entry.thumbnail;
-  }
-  const thumbs = entry.thumbnails;
-  if (Array.isArray(thumbs) && thumbs.length > 0) {
-    const first = thumbs[0] as Record<string, unknown>;
-    if (typeof first.url === 'string') {
-      return first.url;
-    }
-  }
-  return '';
-}
-
-function pickArtist(entry: Record<string, unknown>): string {
-  const a = entry.artist;
-  if (typeof a === 'string' && a) {
-    return a;
-  }
-  const u = entry.uploader;
-  if (typeof u === 'string' && u) {
-    return u;
-  }
-  const c = entry.channel;
-  if (typeof c === 'string' && c) {
-    return c;
-  }
-  return '';
-}
-
-function parseJsonLines(stdout: string): Record<string, unknown>[] {
-  const out: Record<string, unknown>[] = [];
-  for (const line of stdout.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed) {
-      continue;
-    }
-    try {
-      out.push(JSON.parse(trimmed) as Record<string, unknown>);
-    } catch {
-      continue;
-    }
-  }
-  return out;
-}
-
-function isYoutubeVideoId(id: string): boolean {
-  return /^[a-zA-Z0-9_-]{11}$/.test(id);
-}
-
-function mapFullEntry(entry: Record<string, unknown>): TrackMetadata {
-  const id = entry.id;
-  const trackId = typeof id === 'string' ? id : '';
-  const title = typeof entry.title === 'string' ? entry.title : '';
-  return {
-    trackId,
-    title,
-    artist: pickArtist(entry),
-    thumbnailUrl: pickThumbnail(entry),
-    duration: normalizeDuration(entry.duration) ?? 0,
-  };
-}
-
-/**
- * Canonical form of a search query for cache keys.
- *
- * YouTube treats "Rihanna", "rihanna" and "  Rihanna   " as the same search,
- * so without this every casing and whitespace variation became a separate
- * upstream request on top of a separate cache entry.
- */
-function normalizeQueryForCache(query: string): string {
-  return query.trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
 export class YtdlpService {

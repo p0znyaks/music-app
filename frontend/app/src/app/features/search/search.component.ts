@@ -13,52 +13,27 @@ import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, NavigationEnd, Router } from '@angular/router';
 import {
-  catchError,
   combineLatest,
   debounce,
   distinctUntilChanged,
   filter,
   finalize,
   map,
-  merge,
-  type Observable,
   of,
   Subject,
   timer,
   switchMap,
-  tap,
 } from 'rxjs';
-import { ApiService } from '../../core/services/api.service';
 import { FavoritesService } from '../../core/services/favorites.service';
 import { AlbumCardComponent } from '../../shared/components/album-card/album-card.component';
 import { ArtistCardComponent } from '../../shared/components/artist-card/artist-card.component';
 import { TrackCardComponent } from '../../shared/components/track-card/track-card.component';
-import type { AppTrack } from '../../shared/models/track.model';
-import type { SearchBundle, YtmAlbumCard, YtmArtistCard } from './search.model';
+import { SearchDataService, type SearchTab } from './search-data.service';
 import { TranslatePipe } from '../../shared/pipes/t.pipe';
 import { AppSettingsService } from '../../core/services/app-settings.service';
 import { EmptyStateComponent } from '../../shared/components/empty-state/empty-state.component';
 import { SkeletonComponent } from '../../shared/components/skeleton/skeleton.component';
 import { IconComponent } from '../../shared/components/icon/icon.component';
-
-type SearchTab = 'tracks' | 'albums' | 'artists' | 'all';
-
-interface QueryPayload {
-  tracks?: AppTrack[];
-  albums?: YtmAlbumCard[];
-  artists?: YtmArtistCard[];
-}
-
-function sortTracksByArtistQuery(tracks: AppTrack[], rawQuery: string): AppTrack[] {
-  const q = rawQuery.trim().toLowerCase();
-  if (!q) {
-    return [...tracks];
-  }
-  const isExactArtist = (t: AppTrack) => t.artist.trim().toLowerCase() === q;
-  const matched = tracks.filter(isExactArtist);
-  const rest = tracks.filter((t) => !isExactArtist(t));
-  return [...matched, ...rest];
-}
 
 @Component({
   selector: 'app-search',
@@ -199,171 +174,25 @@ function sortTracksByArtistQuery(tracks: AppTrack[], rawQuery: string): AppTrack
       }
     </div>
   `,
-  styles: `
-    .page {
-      padding: 0 1.5rem 2rem 2rem;
-      max-width: 720px;
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-    }
-    .search-box {
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 1rem 1.25rem;
-      transition: border-color 0.2s ease;
-    }
-    .search-box:focus-within {
-      border-color: #444;
-    }
-    .lens {
-      width: 26px;
-      height: 26px;
-      color: var(--accent-dim);
-      flex-shrink: 0;
-    }
-    .inp {
-      flex: 1;
-      border: none;
-      background: transparent;
-      font-size: 1.25rem;
-      font-weight: 500;
-      outline: none;
-    }
-    .inp::placeholder {
-      color: var(--accent-dim);
-      font-weight: 400;
-    }
-
-    .tabs {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-    .tab {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 10px 16px 10px 12px;
-      border-radius: 999px;
-      border: 1px solid var(--border);
-      background: var(--bg-card);
-      color: var(--accent-dim);
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
-      transition:
-        background 0.22s ease,
-        color 0.22s ease,
-        border-color 0.22s ease,
-        box-shadow 0.22s ease;
-    }
-    .tab:hover {
-      color: var(--accent);
-      border-color: #3a3a3a;
-      background: var(--bg-hover);
-    }
-    .tab.active {
-      color: var(--accent);
-      border-color: #4a4a4a;
-      background: var(--bg-hover);
-      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06);
-    }
-    .tab-check {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 18px;
-      height: 18px;
-      flex-shrink: 0;
-      opacity: 0;
-      transform: scale(0.45) rotate(-12deg);
-      transition:
-        opacity 0.24s cubic-bezier(0.34, 1.2, 0.64, 1),
-        transform 0.24s cubic-bezier(0.34, 1.2, 0.64, 1);
-    }
-    .tab.active .tab-check {
-      opacity: 1;
-      transform: scale(1) rotate(0deg);
-      color: var(--accent);
-    }
-    .check-svg {
-      width: 16px;
-      height: 16px;
-      display: block;
-    }
-    .check-path {
-      stroke-dasharray: 22;
-      stroke-dashoffset: 22;
-      transition: stroke-dashoffset 0.28s cubic-bezier(0.34, 1.2, 0.64, 1);
-    }
-    .tab.active .check-path {
-      stroke-dashoffset: 0;
-    }
-    .tab-text {
-      line-height: 1.2;
-    }
-
-    .sections {
-      display: flex;
-      flex-direction: column;
-      gap: 1.5rem;
-    }
-    .section-title {
-      font-size: 0.95rem;
-      font-weight: 600;
-      letter-spacing: 0.02em;
-      color: var(--accent-dim);
-      margin: 0 0 8px;
-      text-transform: uppercase;
-    }
-
-    .list {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-    .sentinel {
-      height: 1px;
-      width: 100%;
-      margin-top: 8px;
-      pointer-events: none;
-    }
-  `,
+  styleUrl: './search.component.css',
 })
 export class SearchComponent {
   private static readonly QUERY_STORAGE_KEY = 'search.query';
   private static readonly TAB_STORAGE_KEY = 'search.tab';
   private static readonly LAST_VIEW_KEY = 'last.view';
-  private static readonly QUERY_CACHE_LIMIT = 30;
-
-  /** Shortest cached query that may stand in for a longer one being typed. */
-  private static readonly PREFIX_MIN_LEN = 3;
-
-  /**
-   * Per-query result cache. Keyed by lowercase query and bounded, because it is
-   * static and therefore outlives the component: an unbounded Map would keep
-   * every track list of the whole session in memory.
-   */
-  private static readonly queryPayloadCache = new Map<string, QueryPayload>();
 
   private static readonly PAGE_STEP = 15;
   private static readonly INITIAL_TAB = 15;
   private static readonly INITIAL_ALL = 24;
 
   private readonly destroyRef = inject(DestroyRef);
-  private readonly api = inject(ApiService);
+  private readonly data = inject(SearchDataService);
   private readonly favorites = inject(FavoritesService);
   private readonly settings = inject(AppSettingsService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly query$ = new Subject<string>();
 
-  private requestGen = 0;
   private scrollObserver: IntersectionObserver | null = null;
   private sentinelCooldownUntil = 0;
   private lastRouteQuery = '';
@@ -380,13 +209,6 @@ export class SearchComponent {
   ];
 
   inputModel = '';
-  readonly loadingTracks = signal(false);
-  readonly loadingAlbums = signal(false);
-  readonly loadingArtists = signal(false);
-  readonly tracks = signal<AppTrack[]>([]);
-  readonly albums = signal<YtmAlbumCard[]>([]);
-  readonly artists = signal<YtmArtistCard[]>([]);
-  readonly hasSearched = signal(false);
   readonly activeTab = signal<SearchTab>('tracks');
   readonly visibleLimit = signal(SearchComponent.INITIAL_TAB);
 
@@ -523,270 +345,20 @@ export class SearchComponent {
     combineLatest([queryDebounced, toObservable(this.activeTab)])
       .pipe(
         switchMap(([q, tab]) => {
-          const normalizedQ = q.trim();
           const minLenForStructuredSearch =
             tab === 'albums' || tab === 'artists' || tab === 'all' ? 2 : 1;
-          if (normalizedQ.length > 0 && normalizedQ.length < minLenForStructuredSearch) {
-            this.requestGen += 1;
-            this.loadingTracks.set(false);
-            this.loadingAlbums.set(false);
-            this.loadingArtists.set(false);
-            this.tracks.set([]);
-            this.albums.set([]);
-            this.artists.set([]);
-            this.hasSearched.set(true);
+          if (!q || q.length < minLenForStructuredSearch) {
+            this.data.reset(q.length > 0);
             this.visibleLimit.set(SearchComponent.INITIAL_TAB);
             return of(null);
           }
-
-          if (!q) {
-            this.requestGen += 1;
-            this.loadingTracks.set(false);
-            this.loadingAlbums.set(false);
-            this.loadingArtists.set(false);
-            this.tracks.set([]);
-            this.albums.set([]);
-            this.artists.set([]);
-            this.hasSearched.set(false);
-            this.visibleLimit.set(SearchComponent.INITIAL_TAB);
-            return of(null);
-          }
-
-          const gen = (this.requestGen += 1);
-          this.hasSearched.set(true);
-          const enc = encodeURIComponent(q);
-          const cache = SearchComponent.getQueryCache(q);
-
-          // While the request for this exact query is in flight, show the
-          // results of the longest already-cached prefix. Typing "rih" then
-          // "rihanna" paints the "ri" result instantly instead of waiting for
-          // the network. The fresh response replaces it a moment later.
-          const staleTracks = SearchComponent.findCachedTracks(q);
-          if (staleTracks && tab === 'tracks') {
-            this.tracks.set(staleTracks);
-            this.visibleLimit.set(SearchComponent.INITIAL_TAB);
-          }
-
-          const fin = (flag: 'tracks' | 'albums' | 'artists') => () => {
-            if (gen === this.requestGen) {
-              if (flag === 'tracks') {
-                this.loadingTracks.set(false);
-              } else if (flag === 'albums') {
-                this.loadingAlbums.set(false);
-              } else {
-                this.loadingArtists.set(false);
-              }
-            }
-          };
-
-          const streams: Observable<unknown>[] = [];
-
-          if (tab === 'all') {
-            if (cache.tracks) {
-              this.tracks.set(sortTracksByArtistQuery([...cache.tracks], q));
-              this.loadingTracks.set(false);
-            } else {
-              this.loadingTracks.set(true);
-              streams.push(
-                this.api.get<SearchBundle>(`search?q=${enc}`).pipe(
-                  tap((bundle) => {
-                    cache.tracks = sortTracksByArtistQuery(bundle.tracks, q);
-                    if (gen === this.requestGen) {
-                      this.tracks.set(cache.tracks!);
-                    }
-                  }),
-                  catchError(() => {
-                    cache.tracks = [];
-                    if (gen === this.requestGen) {
-                      this.tracks.set([]);
-                    }
-                    return of(null);
-                  }),
-                  finalize(fin('tracks')),
-                ),
-              );
-            }
-
-            if (cache.albums) {
-              this.albums.set([...cache.albums]);
-              this.loadingAlbums.set(false);
-            } else {
-              this.loadingAlbums.set(true);
-              streams.push(
-                this.api.get<YtmAlbumCard[]>(`search/albums?q=${enc}`).pipe(
-                  tap((albums) => {
-                    cache.albums = albums;
-                    if (gen === this.requestGen) {
-                      this.albums.set(albums);
-                    }
-                  }),
-                  catchError(() => {
-                    cache.albums = [];
-                    if (gen === this.requestGen) {
-                      this.albums.set([]);
-                    }
-                    return of(null);
-                  }),
-                  finalize(fin('albums')),
-                ),
-              );
-            }
-
-            if (cache.artists) {
-              this.artists.set([...cache.artists]);
-              this.loadingArtists.set(false);
-            } else {
-              this.loadingArtists.set(true);
-              streams.push(
-                this.api.get<YtmArtistCard[]>(`search/artists?q=${enc}`).pipe(
-                  tap((artists) => {
-                    cache.artists = artists;
-                    if (gen === this.requestGen) {
-                      this.artists.set(artists);
-                    }
-                  }),
-                  catchError(() => {
-                    cache.artists = [];
-                    if (gen === this.requestGen) {
-                      this.artists.set([]);
-                    }
-                    return of(null);
-                  }),
-                  finalize(fin('artists')),
-                ),
-              );
-            }
-
-            if (gen === this.requestGen) {
-              this.visibleLimit.set(SearchComponent.INITIAL_ALL);
-            }
-            if (streams.length === 0) {
-              return of(null);
-            }
-            // merge, not concat: concat would run the tracks, albums and
-            // artists requests one after another, so the "All" tab would take
-            // as long as the three round-trips added up instead of their max.
-            return merge(...streams);
-          }
-
-          if (tab === 'tracks') {
-            if (cache.tracks) {
-              this.tracks.set(sortTracksByArtistQuery([...cache.tracks], q));
-              this.loadingTracks.set(false);
-              this.albums.set([]);
-              this.artists.set([]);
-              this.loadingAlbums.set(false);
-              this.loadingArtists.set(false);
-              if (gen === this.requestGen) {
-                this.visibleLimit.set(SearchComponent.INITIAL_TAB);
-              }
-              return of(null);
-            }
-            this.loadingTracks.set(true);
-            this.loadingAlbums.set(false);
-            this.loadingArtists.set(false);
-            this.albums.set([]);
-            this.artists.set([]);
-            return this.api.get<SearchBundle>(`search?q=${enc}`).pipe(
-              tap((bundle) => {
-                cache.tracks = sortTracksByArtistQuery(bundle.tracks, q);
-                if (gen === this.requestGen) {
-                  this.tracks.set(cache.tracks!);
-                }
-              }),
-              catchError(() => {
-                cache.tracks = [];
-                if (gen === this.requestGen) {
-                  this.tracks.set([]);
-                }
-                return of(null);
-              }),
-              finalize(() => {
-                fin('tracks')();
-                if (gen === this.requestGen) {
-                  this.visibleLimit.set(SearchComponent.INITIAL_TAB);
-                }
-              }),
-            );
-          }
-
-          if (tab === 'albums') {
-            if (cache.albums) {
-              this.albums.set([...cache.albums]);
-              this.loadingAlbums.set(false);
-              this.tracks.set([]);
-              this.artists.set([]);
-              this.loadingTracks.set(false);
-              this.loadingArtists.set(false);
-              if (gen === this.requestGen) {
-                this.visibleLimit.set(SearchComponent.INITIAL_TAB);
-              }
-              return of(null);
-            }
-            this.loadingAlbums.set(true);
-            this.loadingTracks.set(false);
-            this.loadingArtists.set(false);
-            this.tracks.set([]);
-            this.artists.set([]);
-            return this.api.get<YtmAlbumCard[]>(`search/albums?q=${enc}`).pipe(
-              tap((albums) => {
-                cache.albums = albums;
-                if (gen === this.requestGen) {
-                  this.albums.set(albums);
-                }
-              }),
-              catchError(() => {
-                cache.albums = [];
-                if (gen === this.requestGen) {
-                  this.albums.set([]);
-                }
-                return of(null);
-              }),
-              finalize(() => {
-                fin('albums')();
-                if (gen === this.requestGen) {
-                  this.visibleLimit.set(SearchComponent.INITIAL_TAB);
-                }
-              }),
-            );
-          }
-
-          if (cache.artists) {
-            this.artists.set([...cache.artists]);
-            this.loadingArtists.set(false);
-            this.tracks.set([]);
-            this.albums.set([]);
-            this.loadingTracks.set(false);
-            this.loadingAlbums.set(false);
-            if (gen === this.requestGen) {
-              this.visibleLimit.set(SearchComponent.INITIAL_TAB);
-            }
-            return of(null);
-          }
-          this.loadingArtists.set(true);
-          this.loadingTracks.set(false);
-          this.loadingAlbums.set(false);
-          this.tracks.set([]);
-          this.albums.set([]);
-          return this.api.get<YtmArtistCard[]>(`search/artists?q=${enc}`).pipe(
-            tap((artists) => {
-              cache.artists = artists;
-              if (gen === this.requestGen) {
-                this.artists.set(artists);
-              }
-            }),
-            catchError(() => {
-              cache.artists = [];
-              if (gen === this.requestGen) {
-                this.artists.set([]);
-              }
-              return of(null);
-            }),
+          // The row budget differs per tab and the service cannot know about
+          // it, so it is reset here once the results have settled.
+          return this.data.run(q, tab).pipe(
             finalize(() => {
-              fin('artists')();
-              if (gen === this.requestGen) {
-                this.visibleLimit.set(SearchComponent.INITIAL_TAB);
-              }
+              this.visibleLimit.set(
+                tab === 'all' ? SearchComponent.INITIAL_ALL : SearchComponent.INITIAL_TAB,
+              );
             }),
           );
         }),
@@ -865,56 +437,6 @@ export class SearchComponent {
     this.visibleLimit.update((v) => Math.min(v + SearchComponent.PAGE_STEP, cap));
   }
 
-  /**
-   * Tracks of the longest cached query that is a prefix of `q`, or null.
-   *
-   * Used to paint something immediately while the real request is still in
-   * flight. Only queries at least {@link PREFIX_MIN_LEN} long qualify, so a
-   * two-letter cache entry never replaces a meaningful result set.
-   */
-  private static findCachedTracks(q: string): AppTrack[] | null {
-    const needle = q.trim().toLowerCase();
-    if (needle.length < SearchComponent.PREFIX_MIN_LEN) {
-      return null;
-    }
-    let best: AppTrack[] | null = null;
-    for (let len = needle.length - 1; len >= SearchComponent.PREFIX_MIN_LEN; len -= 1) {
-      const cached = SearchComponent.queryPayloadCache.get(needle.slice(0, len));
-      if (cached?.tracks?.length) {
-        best = cached.tracks;
-        break;
-      }
-    }
-    return best;
-  }
-
-  private static getQueryCache(q: string): QueryPayload {
-    const key = q.trim().toLowerCase();
-    const existing = SearchComponent.queryPayloadCache.get(key);
-    if (existing) {
-      // Re-insert to mark it as most recently used.
-      SearchComponent.queryPayloadCache.delete(key);
-      SearchComponent.queryPayloadCache.set(key, existing);
-      return existing;
-    }
-
-    const fresh: QueryPayload = {};
-    SearchComponent.queryPayloadCache.set(key, fresh);
-    const overflow = SearchComponent.queryPayloadCache.size - SearchComponent.QUERY_CACHE_LIMIT;
-    if (overflow > 0) {
-      // Map preserves insertion order, so the first key is the oldest.
-      const oldest = SearchComponent.queryPayloadCache.keys();
-      for (let i = 0; i < overflow; i += 1) {
-        const victim = oldest.next();
-        if (victim.done) {
-          break;
-        }
-        SearchComponent.queryPayloadCache.delete(victim.value);
-      }
-    }
-    return fresh;
-  }
-
   setTab(id: SearchTab): void {
     this.activeTab.set(id);
     this.visibleLimit.set(id === 'all' ? SearchComponent.INITIAL_ALL : SearchComponent.INITIAL_TAB);
@@ -967,4 +489,12 @@ export class SearchComponent {
   private writeStoredTab(value: SearchTab): void {
     sessionStorage.setItem(SearchComponent.TAB_STORAGE_KEY, value);
   }
+
+  readonly loadingTracks = this.data.loadingTracks;
+  readonly loadingAlbums = this.data.loadingAlbums;
+  readonly loadingArtists = this.data.loadingArtists;
+  readonly tracks = this.data.tracks;
+  readonly albums = this.data.albums;
+  readonly artists = this.data.artists;
+  readonly hasSearched = this.data.hasSearched;
 }

@@ -48,7 +48,17 @@ interface ClipData {
                 <app-icon name="play" [size]="24" />
               }
             </button>
-            <div class="progress-wrap" (click)="onBarClick($event)">
+            <div
+              class="progress-wrap"
+              role="slider"
+              tabindex="0"
+              aria-label="seek"
+              aria-valuemin="0"
+              [attr.aria-valuenow]="progressPercent()"
+              (click)="onBarClick($event)"
+              (keydown.arrowleft)="nudgeSeek(-5)"
+              (keydown.arrowright)="nudgeSeek(5)"
+            >
               <div class="progress-bg">
                 <div class="progress-fill" [style.width.%]="progressPercent()"></div>
               </div>
@@ -67,127 +77,7 @@ interface ClipData {
       </div>
     }
   `,
-  styles: `
-    :host {
-      display: block;
-    }
-    .page {
-      min-height: 100vh;
-      background: var(--bg);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 2rem;
-      position: relative;
-    }
-    .page.not-found {
-      gap: 1rem;
-    }
-    .nf-title {
-      font-size: 4rem;
-      font-weight: 800;
-      color: var(--accent);
-      margin: 0;
-    }
-    .nf-text {
-      font-size: 1.25rem;
-      color: var(--accent-dim);
-      margin: 0;
-    }
-    .nf-link {
-      color: var(--accent);
-      text-decoration: underline;
-      font-size: 1rem;
-    }
-    .loader {
-      color: var(--accent-dim);
-    }
-    .clip-content {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      text-align: center;
-      max-width: 360px;
-    }
-    .cover-wrap {
-      width: 200px;
-      height: 200px;
-      border-radius: 16px;
-      overflow: hidden;
-      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
-      margin-bottom: 1.5rem;
-    }
-    .cover-wrap img {
-      width: 200px;
-      height: 200px;
-      object-fit: cover;
-      display: block;
-    }
-    .track-title {
-      font-size: 1.5rem;
-      font-weight: 600;
-      color: var(--accent);
-      margin: 0 0 0.25rem 0;
-    }
-    .track-artist {
-      font-size: 1rem;
-      color: var(--accent-dim);
-      margin: 0 0 1.5rem 0;
-    }
-    .player-wrap {
-      width: 100%;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 12px;
-    }
-    .play-btn {
-      width: 56px;
-      height: 56px;
-      border-radius: 50%;
-      border: none;
-      background: var(--accent);
-      color: var(--bg);
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: transform 0.12s ease;
-    }
-    .play-btn.tap:active {
-      transform: scale(0.94);
-    }
-    .progress-wrap {
-      width: 100%;
-      cursor: pointer;
-      padding: 8px 0;
-    }
-    .progress-bg {
-      height: 4px;
-      background: var(--border);
-      border-radius: 2px;
-      overflow: hidden;
-    }
-    .progress-fill {
-      height: 100%;
-      background: var(--accent);
-      border-radius: 2px;
-      transition: width 0.05s linear;
-    }
-    .time-display {
-      font-size: 12px;
-      color: var(--accent-dim);
-    }
-    .footer {
-      position: absolute;
-      bottom: 1.5rem;
-      font-size: 0.8rem;
-      color: var(--accent-dim);
-      margin: 0;
-      text-align: center;
-    }
-  `,
+  styleUrl: './clip.component.css',
 })
 export class ClipComponent {
   private readonly api = inject(ApiService);
@@ -328,6 +218,17 @@ export class ClipComponent {
       void el.play().catch(() => {});
       this.playing.set(true);
     }
+  }
+
+  /** Keyboard equivalent of dragging the clip progress bar. */
+  nudgeSeek(deltaSec: number): void {
+    const ref = this.audioRef();
+    const c = this.clip();
+    if (!ref || !c) return;
+    const el = ref.nativeElement as HTMLAudioElement;
+    const span = c.endTime - c.startTime;
+    if (span <= 0) return;
+    el.currentTime = Math.max(c.startTime, Math.min(c.endTime, el.currentTime + deltaSec));
   }
 
   onBarClick(ev: MouseEvent): void {

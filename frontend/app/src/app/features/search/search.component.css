@@ -1,0 +1,133 @@
+.page {
+  padding: 0 1.5rem 2rem 2rem;
+  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1rem 1.25rem;
+  transition: border-color 0.2s ease;
+}
+.search-box:focus-within {
+  border-color: #444;
+}
+.lens {
+  width: 26px;
+  height: 26px;
+  color: var(--accent-dim);
+  flex-shrink: 0;
+}
+.inp {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 1.25rem;
+  font-weight: 500;
+  outline: none;
+}
+.inp::placeholder {
+  color: var(--accent-dim);
+  font-weight: 400;
+}
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px 10px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--accent-dim);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 0.22s ease,
+    color 0.22s ease,
+    border-color 0.22s ease,
+    box-shadow 0.22s ease;
+}
+.tab:hover {
+  color: var(--accent);
+  border-color: #3a3a3a;
+  background: var(--bg-hover);
+}
+.tab.active {
+  color: var(--accent);
+  border-color: #4a4a4a;
+  background: var(--bg-hover);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+.tab-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  opacity: 0;
+  transform: scale(0.45) rotate(-12deg);
+  transition:
+    opacity 0.24s cubic-bezier(0.34, 1.2, 0.64, 1),
+    transform 0.24s cubic-bezier(0.34, 1.2, 0.64, 1);
+}
+.tab.active .tab-check {
+  opacity: 1;
+  transform: scale(1) rotate(0deg);
+  color: var(--accent);
+}
+.check-svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+.check-path {
+  stroke-dasharray: 22;
+  stroke-dashoffset: 22;
+  transition: stroke-dashoffset 0.28s cubic-bezier(0.34, 1.2, 0.64, 1);
+}
+.tab.active .check-path {
+  stroke-dashoffset: 0;
+}
+.tab-text {
+  line-height: 1.2;
+}
+
+.sections {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+.section-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--accent-dim);
+  margin: 0 0 8px;
+  text-transform: uppercase;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sentinel {
+  height: 1px;
+  width: 100%;
+  margin-top: 8px;
+  pointer-events: none;
+}

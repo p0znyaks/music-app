@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { ArtistLookupService } from '../../../core/services/artist-lookup.service';
 import type { YtmAlbumCard } from '../../../features/search/search.model';
@@ -9,6 +9,7 @@ import { ThumbComponent } from '../thumb/thumb.component';
 @Component({
   selector: 'app-album-card',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [CommonModule, RouterLink, TranslatePipe, ThumbComponent],
   template: `
     <a
@@ -40,107 +41,7 @@ import { ThumbComponent } from '../thumb/thumb.component';
       <span class="row-badge">{{ 'albumBadge' | t }}</span>
     </a>
   `,
-  styles: `
-    :host {
-      display: block;
-    }
-    a.row-card {
-      text-decoration: none;
-      color: inherit;
-    }
-    .row-card {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      min-height: 64px;
-      padding: 0 12px;
-      border: 1px solid var(--border);
-      background: var(--bg-card);
-      border-radius: 10px;
-      transition: background 0.2s ease;
-    }
-    .row-card:hover {
-      background: var(--bg-hover);
-    }
-    .row-thumb.album-cover {
-      width: 48px;
-      height: 48px;
-      border-radius: 8px;
-      overflow: hidden;
-      flex-shrink: 0;
-    }
-    .row-thumb.album-cover img {
-      width: 48px;
-      height: 48px;
-      object-fit: cover;
-      display: block;
-    }
-    .thumb-ph {
-      width: 48px;
-      height: 48px;
-    }
-    .row-info {
-      flex: 1;
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      justify-content: center;
-    }
-    .row-title {
-      font-size: 14px;
-      font-weight: 500;
-      color: var(--accent);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .row-sub {
-      font-size: 12px;
-      color: var(--accent-dim);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .row-artist {
-      display: inline;
-      background: transparent;
-      border: 0;
-      padding: 0;
-      margin: 0;
-      font: inherit;
-      color: inherit;
-      text-align: left;
-      cursor: pointer;
-    }
-    .row-artist-link:hover {
-      text-decoration: underline;
-      color: var(--accent);
-    }
-    .row-sep {
-      opacity: 0.55;
-      margin: 0 4px;
-    }
-    .row-year {
-      font-variant-numeric: tabular-nums;
-      color: var(--accent-dim);
-    }
-    .row-badge {
-      flex-shrink: 0;
-      font-size: 10px;
-      font-weight: 600;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      color: var(--accent-dim);
-      padding: 4px 8px;
-      border-radius: 6px;
-      background: var(--bg-hover);
-      border: 1px solid var(--border);
-    }
-    .tap:active {
-      transform: scale(0.992);
-    }
-  `,
+  styleUrl: './album-card.component.css',
 })
 export class AlbumCardComponent {
   private static readonly LAST_VIEW_KEY = 'last.view';

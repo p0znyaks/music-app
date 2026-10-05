@@ -1,0 +1,198 @@
+/* Host replaces the old .queue-sheet grid item inside .player. */
+:host {
+  border-top: 1px solid var(--border);
+  padding: 14px 18px 18px;
+  /* Grid row is minmax(0, 1fr); need min-height + overflow so inner scroll works with many tracks */
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.queue-head {
+  flex-shrink: 0;
+}
+.queue-head h3 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+.queue-head p {
+  font-size: 0.86rem;
+  color: var(--accent-dim);
+}
+.queue-list {
+  flex: 1 1 0%;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overscroll-behavior: contain;
+}
+:host(.queue-reordering) .queue-list {
+  cursor: grabbing;
+}
+.queue-row-wrap {
+  flex-shrink: 0;
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  gap: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: transparent;
+  transition:
+    opacity 0.2s ease,
+    border-color 0.22s ease,
+    box-shadow 0.22s ease;
+}
+.queue-row-wrap:hover {
+  border-color: var(--accent-dim);
+}
+.queue-row-wrap.queue-row-wrap--current {
+  border-color: var(--accent-dim);
+}
+.queue-row-wrap.dragging-row {
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  opacity: 0.97;
+}
+.queue-grip {
+  flex-shrink: 0;
+  width: 38px;
+  border: none;
+  background: var(--overlay-panel-bg);
+  color: var(--accent-dim);
+  display: grid;
+  place-items: center;
+  cursor: grab;
+  transition:
+    background 0.22s ease,
+    color 0.22s ease;
+}
+.queue-grip:hover {
+  background: var(--overlay-panel-bg-strong);
+  color: var(--accent);
+}
+:host(.queue-reordering) .queue-grip {
+  cursor: grabbing;
+  color: var(--accent);
+  background: var(--overlay-panel-bg-strong);
+}
+.queue-grip .grip-svg {
+  width: 12px;
+  height: 20px;
+  display: block;
+}
+.queue-grip.tap:active:not(:disabled) {
+  transform: scale(0.92);
+}
+
+.queue-row {
+  border: none;
+  background: var(--bg);
+  flex: 1;
+  border-radius: 0;
+  min-width: 0;
+  min-height: 62px;
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--accent);
+}
+.queue-row:hover {
+  background: var(--bg-hover);
+}
+.queue-row-wrap--current .queue-row {
+  background: var(--bg-hover);
+}
+.queue-thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--bg-hover);
+}
+.queue-thumb img,
+.queue-meta {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.queue-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.queue-artist-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
+}
+.queue-artist {
+  font-size: 0.82rem;
+  color: var(--accent-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.queue-dur {
+  font-size: 0.82rem;
+  color: var(--accent-dim);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  display: inline;
+}
+.eq {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  width: 14px;
+  height: 12px;
+  flex-shrink: 0;
+}
+.eq span {
+  width: 3px;
+  border-radius: 999px;
+  background: var(--accent);
+  transform-origin: bottom;
+  animation: eq-wave 850ms ease-in-out infinite;
+}
+.eq span:nth-child(1) {
+  height: 45%;
+  animation-delay: 0ms;
+}
+.eq span:nth-child(2) {
+  height: 75%;
+  animation-delay: 140ms;
+}
+.eq span:nth-child(3) {
+  height: 60%;
+  animation-delay: 260ms;
+}
+@keyframes eq-wave {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+    opacity: 0.85;
+  }
+  50% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}

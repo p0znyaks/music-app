@@ -1,0 +1,69 @@
+.page {
+  padding: 0 1.5rem 2rem 2rem;
+  max-width: 720px;
+}
+.back {
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--accent-dim);
+  padding: 0.45rem 0.75rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+}
+.hero {
+  display: flex;
+  gap: 1.25rem;
+  align-items: center;
+  margin-bottom: 1.75rem;
+}
+.avatar {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.avatar-ph {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: #2a2a2a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #606060;
+  flex-shrink: 0;
+}
+.meta {
+  min-width: 0;
+}
+h1 {
+  font-size: 1.35rem;
+  margin: 0 0 0.35rem;
+}
+.sub {
+  margin: 0;
+  color: var(--accent-dim);
+  font-size: 0.95rem;
+}
+.section-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--accent-dim);
+  margin: 0 0 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.skel-list {
+  margin-top: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}

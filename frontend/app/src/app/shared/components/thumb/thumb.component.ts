@@ -25,28 +25,7 @@ export type ThumbVariant = 'cover' | 'avatar' | 'queue';
       <div [class]="'thumb-ph ' + variant() + '-ph'" aria-hidden="true"></div>
     }
   `,
-  styles: `
-    :host {
-      display: block;
-      flex-shrink: 0;
-    }
-    img,
-    .thumb-ph {
-      width: 100%;
-      height: 100%;
-      display: block;
-      object-fit: cover;
-    }
-    .cover-ph,
-    .avatar-ph,
-    .queue-thumb-ph {
-      border-radius: var(--r-sm);
-      background: var(--bg-hover);
-    }
-    .avatar-ph {
-      border-radius: 50%;
-    }
-  `,
+  styleUrl: './thumb.component.css',
 })
 export class ThumbComponent {
   /** Artwork URL. Null/empty renders the placeholder. */

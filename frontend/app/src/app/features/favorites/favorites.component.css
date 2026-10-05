@@ -1,0 +1,62 @@
+h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin-bottom: 0.8rem;
+}
+.favorites-meta {
+  margin-bottom: 1.25rem;
+}
+.meta-sep {
+  color: var(--accent-dim);
+  opacity: 0.7;
+}
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+.action-btn {
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--accent);
+  border-radius: 999px;
+  height: 40px;
+  padding: 0 1rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    color 0.2s ease,
+    transform 0.12s ease;
+}
+.action-btn svg {
+  width: 16px;
+  height: 16px;
+}
+.action-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--accent-dim);
+  color: var(--accent);
+}
+.action-btn.alt svg {
+  width: 15px;
+  height: 15px;
+}
+.action-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.action-btn.tap:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.muted {
+  color: var(--accent-dim);
+}
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}

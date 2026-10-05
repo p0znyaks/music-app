@@ -1,3 +1,4 @@
+import type Redis from 'ioredis';
 import { AsyncSemaphore } from '../env';
 import { getRedis } from './redis';
 
@@ -221,32 +222,60 @@ async function fetchImageWithRetry(
   };
 }
 
+/**
+ * Картинка кэшируется Redis-хэшем: `ct` — content-type, `body` — сырые
+ * байты. Так данные лежат в памяти без base64 (это +33% к размеру) и на
+ * попадании в кэш не нужно ни JSON.parse, ни обратного декодирования.
+ * Старые записи в формате JSON-строки просто считаются промахом.
+ */
+const FIELD_CONTENT_TYPE = 'ct';
+const FIELD_BODY = 'body';
+
+async function readCachedImage(
+  redis: Redis,
+  key: string,
+): Promise<{ contentType: string; body: Buffer } | null> {
+  try {
+    const [contentType, body] = await Promise.all([
+      redis.hget(key, FIELD_CONTENT_TYPE),
+      redis.hgetBuffer(key, FIELD_BODY),
+    ]);
+    if (typeof contentType !== 'string' || !Buffer.isBuffer(body) || body.length === 0) {
+      return null;
+    }
+    return { contentType, body };
+  } catch {
+    // Cache corruption or a Redis failure should not break image proxying.
+    return null;
+  }
+}
+
+async function writeCachedImage(
+  redis: Redis,
+  key: string,
+  image: { contentType: string; body: Buffer },
+): Promise<void> {
+  try {
+    await redis
+      .multi()
+      .hset(key, FIELD_CONTENT_TYPE, image.contentType)
+      .hset(key, FIELD_BODY, image.body)
+      .expire(key, IMAGE_CACHE_TTL_SEC)
+      .exec();
+  } catch {
+    // Redis failures should not break image proxying.
+  }
+}
+
 export async function getProxiedImage(
   url: string,
 ): Promise<{ status: number; contentType: string; body: Buffer }> {
-  const key = `img:proxy:v1:${url}`;
+  const key = `img:proxy:v2:${url}`;
   const redis = getRedis();
-  try {
-    const cached = await redis.get(key);
-    if (cached) {
-      try {
-        const parsed = JSON.parse(cached) as {
-          contentType: string;
-          base64: string;
-        };
-        if (typeof parsed.contentType === 'string' && typeof parsed.base64 === 'string') {
-          return {
-            status: 200,
-            contentType: parsed.contentType,
-            body: Buffer.from(parsed.base64, 'base64'),
-          };
-        }
-      } catch {
-        // Cache corruption is non-fatal.
-      }
-    }
-  } catch {
-    // Redis failures should not break image proxying.
+
+  const cached = await readCachedImage(redis, key);
+  if (cached) {
+    return { status: 200, contentType: cached.contentType, body: cached.body };
   }
 
   const pending = inflight.get(url);
@@ -257,15 +286,7 @@ export async function getProxiedImage(
   const task = imageFetchLimiter.use(async () => {
     const fetched = await fetchImageWithRetry(url);
     if (fetched.status === 200) {
-      try {
-        const payload = JSON.stringify({
-          contentType: fetched.contentType,
-          base64: fetched.body.toString('base64'),
-        });
-        await redis.set(key, payload, 'EX', IMAGE_CACHE_TTL_SEC);
-      } catch {
-        // Redis failures should not break image proxying.
-      }
+      await writeCachedImage(redis, key, fetched);
     }
     return fetched;
   });

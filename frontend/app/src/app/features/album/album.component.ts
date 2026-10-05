@@ -10,6 +10,7 @@ import { TrackCardComponent } from '../../shared/components/track-card/track-car
 import type { AlbumDetailDto } from '../search/search.model';
 import { AppTrack } from '../../shared/models/track.model';
 import { formatDurationCompact, normalizeDurationSeconds } from '../../shared/utils/duration.util';
+import { toPlayerTracks } from '../../shared/utils/player-track.util';
 import { TranslatePipe } from '../../shared/pipes/t.pipe';
 import { AppSettingsService } from '../../core/services/app-settings.service';
 import { SkeletonComponent } from '../../shared/components/skeleton/skeleton.component';
@@ -63,83 +64,7 @@ import { SkeletonComponent } from '../../shared/components/skeleton/skeleton.com
       }
     </div>
   `,
-  styles: `
-    .head {
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-      margin-bottom: 1.5rem;
-    }
-    .hero {
-      display: flex;
-      gap: 1.25rem;
-      align-items: flex-start;
-    }
-    .cover {
-      width: 120px;
-      height: 120px;
-      border-radius: 10px;
-      object-fit: cover;
-      flex-shrink: 0;
-    }
-    .meta {
-      min-width: 0;
-      flex: 1;
-    }
-    h1 {
-      font-size: 1.35rem;
-      margin: 0 0 0.35rem;
-      line-height: 1.25;
-    }
-    .sub {
-      margin: 0;
-      color: var(--accent-dim);
-      font-size: 0.95rem;
-    }
-    .sub-link {
-      background: transparent;
-      border: 0;
-      padding: 0;
-      text-align: left;
-      cursor: pointer;
-      width: fit-content;
-    }
-    .sub-link:hover {
-      text-decoration: underline;
-      color: var(--accent);
-    }
-    .year {
-      margin: 0.35rem 0 0;
-      font-size: 0.85rem;
-      color: #808080;
-    }
-    .back {
-      margin: 0;
-      align-self: flex-start;
-      border: 1px solid var(--border);
-      background: var(--bg-card);
-      color: var(--accent-dim);
-      padding: 0.45rem 0.75rem;
-      border-radius: 8px;
-      cursor: pointer;
-      font-size: 0.85rem;
-    }
-    .meta-sep {
-      color: var(--accent-dim);
-      opacity: 0.7;
-    }
-    .list {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-    .skel-list {
-      margin-top: 1rem;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-  `,
+  styleUrl: './album.component.css',
 })
 export class AlbumComponent {
   private static readonly LAST_ALBUM_KEY = 'last.album.browseId';
@@ -154,9 +79,7 @@ export class AlbumComponent {
   readonly loading = signal(true);
   readonly error = signal<string | null>(null);
   readonly detail = signal<AlbumDetailDto | null>(null);
-  readonly queueTracks = computed<PlayerTrack[]>(
-    () => this.detail()?.tracks.map((t) => this.toPlayerTrack(t)) ?? [],
-  );
+  readonly queueTracks = computed<PlayerTrack[]>(() => toPlayerTracks(this.detail()?.tracks ?? []));
   readonly trackCountLabel = computed(
     () => `${this.queueTracks().length} ${this.settings.t('tracksSuffix')}`,
   );
@@ -209,16 +132,6 @@ export class AlbumComponent {
       artist: t.artist,
       thumbnailUrl: t.thumbnailUrl || null,
       duration: t.duration ?? null,
-    };
-  }
-
-  private toPlayerTrack(t: AlbumDetailDto['tracks'][number]): PlayerTrack {
-    return {
-      trackId: t.trackId,
-      title: t.title,
-      artist: t.artist,
-      thumbnailUrl: t.thumbnailUrl || undefined,
-      duration: t.duration ?? undefined,
     };
   }
 }

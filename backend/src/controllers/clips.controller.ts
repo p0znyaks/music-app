@@ -4,6 +4,7 @@ import { AppDataSource } from '../services/dataSource';
 import { Clip } from '../entities/clip.entity';
 import { User } from '../entities/user.entity';
 import { streamTrack } from '../services/audio-stream.service';
+import { clipShortCode } from '../services/tags/clip-times';
 import { routeParam } from '../http/params';
 import { ytdlpService } from '../services/ytdlp.service';
 
@@ -17,7 +18,7 @@ export async function createClip(req: Request, res: Response) {
   if (typeof trackId !== 'string' || !trackId.trim()) {
     return res.status(400).json({ message: 'trackId is required' });
   }
-  if (trackId.trim().startsWith('clip:')) {
+  if (clipShortCode(trackId.trim())) {
     return res.status(400).json({ message: 'Cannot create a clip from a clip' });
   }
   if (typeof title !== 'string' || typeof artist !== 'string') {

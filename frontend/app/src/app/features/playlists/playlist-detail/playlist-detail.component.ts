@@ -13,6 +13,7 @@ import {
   formatDurationCompact,
   normalizeDurationSeconds,
 } from '../../../shared/utils/duration.util';
+import { toPlayerTracks } from '../../../shared/utils/player-track.util';
 import { ModalComponent } from '../../../shared/components/modal/modal.component';
 import { TrackCardComponent } from '../../../shared/components/track-card/track-card.component';
 import { TranslatePipe } from '../../../shared/pipes/t.pipe';
@@ -90,7 +91,7 @@ import { parseErrorPayload } from '../../../shared/utils/error-payload.util';
                 [title]="'remove' | t"
                 [attr.aria-label]="'remove' | t"
               >
-                🗑️
+                <app-icon name="trash" [size]="18" />
               </button>
             }
           </div>
@@ -99,8 +100,15 @@ import { parseErrorPayload } from '../../../shared/utils/error-payload.util';
     </div>
 
     @if (confirming()) {
-      <div class="modal-backdrop" (click)="cancelDelete()">
-        <div class="modal" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+      <div
+        class="modal-backdrop"
+        role="button"
+        tabindex="0"
+        aria-label="cancel"
+        (click)="cancelDelete($event)"
+        (keydown.escape)="cancelDelete()"
+      >
+        <div class="modal" role="dialog" aria-modal="true">
           <div class="modal-title">{{ 'deletePlaylistTitle' | t }}</div>
           <div class="modal-text">{{ 'deletePlaylistConfirm' | t }}</div>
           <div class="modal-actions">
@@ -129,244 +137,7 @@ import { parseErrorPayload } from '../../../shared/utils/error-payload.util';
       </div>
     </app-modal>
   `,
-  styles: `
-    .head {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 1rem;
-      margin-bottom: 1.5rem;
-    }
-    h1 {
-      flex: 1;
-      font-size: 1.5rem;
-      min-width: 0;
-    }
-    .playlist-meta {
-      margin-bottom: 1.1rem;
-    }
-    .meta-sep {
-      color: var(--accent-dim);
-      opacity: 0.7;
-    }
-    .action-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.65rem;
-      align-items: center;
-    }
-    .action-btn {
-      border: 1px solid var(--border);
-      background: var(--bg-card);
-      color: var(--accent);
-      border-radius: 999px;
-      height: 40px;
-      padding: 0 1rem;
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      cursor: pointer;
-      transition:
-        border-color 0.2s ease,
-        background 0.2s ease,
-        color 0.2s ease,
-        transform 0.12s ease;
-    }
-    .action-btn svg {
-      width: 16px;
-      height: 16px;
-    }
-    .action-btn:hover:not(:disabled) {
-      background: var(--bg-hover);
-      border-color: var(--accent-dim);
-      color: var(--accent);
-    }
-    .action-btn.alt svg {
-      width: 15px;
-      height: 15px;
-    }
-    .action-btn:disabled {
-      opacity: 0.45;
-      cursor: not-allowed;
-    }
-    .action-btn.tap:active:not(:disabled) {
-      transform: scale(0.97);
-    }
-    .back {
-      border: 1px solid var(--border);
-      background: var(--bg-card);
-      color: var(--accent-dim);
-      padding: 0.45rem 0.75rem;
-      border-radius: 8px;
-      cursor: pointer;
-      font-size: 0.85rem;
-      transition:
-        background 0.2s ease,
-        border-color 0.2s ease,
-        color 0.2s ease,
-        transform 0.12s ease;
-    }
-    .back:hover {
-      background: var(--bg-hover);
-      border-color: var(--accent-dim);
-      color: var(--accent);
-    }
-    .list {
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-    }
-    .row {
-      display: flex;
-      align-items: flex-start;
-      gap: 0.25rem;
-    }
-    .grow {
-      flex: 1;
-      min-width: 0;
-    }
-    .rm {
-      width: 36px;
-      height: 36px;
-      flex-shrink: 0;
-      border: none;
-      background: transparent;
-      border-radius: 999px;
-      cursor: pointer;
-      display: grid;
-      place-items: center;
-      color: var(--accent-dim);
-      transition:
-        color 0.2s ease,
-        background 0.2s ease,
-        transform 0.12s ease;
-    }
-    .rm:hover {
-      color: var(--accent);
-      background: var(--bg-hover);
-    }
-    .rm.tap:active {
-      transform: scale(0.92);
-    }
-    .list-rm {
-      margin-top: 14px;
-    }
-    .rm.ghost {
-      width: auto;
-      height: auto;
-      padding: 10px 14px;
-      border-radius: 10px;
-      border: 1px solid var(--border);
-      background: transparent;
-      color: var(--accent-dim);
-    }
-    .rm.danger {
-      width: auto;
-      height: auto;
-      padding: 10px 14px;
-      border-radius: 10px;
-      border: 1px solid var(--border);
-      background: var(--accent);
-      color: var(--bg);
-    }
-    .confirm-row {
-      display: flex;
-      justify-content: flex-end;
-      gap: 10px;
-      margin-top: 12px;
-    }
-
-    .del-btn {
-      padding: 0.55rem 1rem;
-      border-radius: 999px;
-      border: 1px solid var(--border);
-      background: var(--bg-card);
-      color: var(--text);
-      cursor: pointer;
-      font-size: 0.9rem;
-      transition:
-        background 0.2s ease,
-        border-color 0.2s ease,
-        transform 0.12s ease;
-      flex-shrink: 0;
-    }
-    .del-btn:hover {
-      background: var(--bg-hover);
-      border-color: var(--accent-dim);
-    }
-    .del-btn.tap:active {
-      transform: scale(0.96);
-    }
-
-    .modal-backdrop {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.55);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 1.25rem;
-      z-index: 1000;
-    }
-    .modal {
-      width: min(520px, 100%);
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 1rem;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
-    }
-    .modal-title {
-      font-size: 1.1rem;
-      font-weight: 800;
-      margin-bottom: 0.5rem;
-    }
-    .modal-text {
-      color: var(--accent-dim);
-      font-size: 0.9rem;
-      line-height: 1.35;
-      margin-bottom: 0.65rem;
-    }
-    .modal-actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: 0.5rem;
-    }
-    .btn {
-      padding: 0.5rem 0.85rem;
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      cursor: pointer;
-      font-size: 0.85rem;
-      transition:
-        background 0.2s ease,
-        border-color 0.2s ease,
-        color 0.2s ease,
-        transform 0.12s ease;
-    }
-    .btn.ghost {
-      background: transparent;
-      color: var(--accent-dim);
-    }
-    .btn.ghost:hover {
-      background: var(--bg-hover);
-      color: var(--accent);
-    }
-    .btn.danger {
-      background: var(--danger);
-      border-color: var(--danger);
-      color: var(--on-danger);
-      font-weight: 700;
-    }
-    .btn.danger:hover {
-      background: var(--danger-strong);
-      border-color: var(--danger-strong);
-    }
-    .btn:disabled {
-      opacity: 0.45;
-      cursor: not-allowed;
-    }
-  `,
+  styleUrl: './playlist-detail.component.css',
 })
 export class PlaylistDetailComponent {
   readonly api = inject(ApiService);
@@ -397,9 +168,7 @@ export class PlaylistDetailComponent {
 
   readonly confirmOpen = signal(false);
   readonly pendingRemoveTrackId = signal<string | null>(null);
-  readonly queueTracks = computed<PlayerTrack[]>(() =>
-    this.tracks().map((row) => this.toPlayerTrack(row)),
-  );
+  readonly queueTracks = computed<PlayerTrack[]>(() => toPlayerTracks(this.tracks()));
   readonly trackCountLabel = computed(
     () => `${this.tracks().length} ${this.settings.t('tracksSuffix')}`,
   );
@@ -568,26 +337,6 @@ export class PlaylistDetailComponent {
     };
   }
 
-  private toPlayerTrack(row: {
-    trackId: string;
-    title: string;
-    artist: string;
-    thumbnailUrl: string | null;
-    duration: number | null;
-    startTime?: number | null;
-    endTime?: number | null;
-  }): PlayerTrack {
-    return {
-      trackId: row.trackId,
-      title: row.title,
-      artist: row.artist,
-      thumbnailUrl: row.thumbnailUrl ?? undefined,
-      duration: normalizeDurationSeconds(row.duration) ?? undefined,
-      startTime: row.startTime ?? undefined,
-      endTime: row.endTime ?? undefined,
-    };
-  }
-
   playAll(): void {
     this.player.startQueue(this.queueTracks());
   }
@@ -657,7 +406,16 @@ export class PlaylistDetailComponent {
     this.confirming.set(true);
   }
 
-  cancelDelete(): void {
+  /**
+   * Cancels the delete confirmation. When invoked from the backdrop the click
+   * target is checked so that clicks inside the dialog are ignored, rather than
+   * attaching a no-op click handler to the dialog element.
+   */
+  cancelDelete(event?: Event): void {
+    const target = event?.target as HTMLElement | null;
+    if (event && target?.closest('.modal')) {
+      return;
+    }
     this.confirming.set(false);
   }
 

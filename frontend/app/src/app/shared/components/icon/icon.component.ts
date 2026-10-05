@@ -1,11 +1,25 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
 /**
- * Names of the icons that appeared duplicated across screens.
- * Anything used once stays inline — extracting it would only move code around.
+ * Names of the icons that live in the shared set.
+ *
+ * Most were extracted because they were duplicated across screens, which let
+ * copies drift apart. `tag` and `plus` were joined because they sit in the same
+ * button row as `play`/`heart`, and inline SVGs there rendered at a different
+ * natural size and baseline — the row looked misaligned.
  */
 export type IconName =
-  'play' | 'pause' | 'search' | 'expand' | 'chevron-left' | 'chevron-right' | 'heart' | 'eye';
+  | 'play'
+  | 'pause'
+  | 'search'
+  | 'expand'
+  | 'chevron-left'
+  | 'chevron-right'
+  | 'heart'
+  | 'eye'
+  | 'tag'
+  | 'plus'
+  | 'trash';
 
 /** Icons that render as a filled shape, the rest are stroked outlines. */
 const FILLED: ReadonlySet<IconName> = new Set<IconName>(['play', 'pause']);
@@ -20,6 +34,9 @@ const NATURAL: Record<IconName, number> = {
   'chevron-right': 24,
   heart: 20,
   eye: 24,
+  tag: 16,
+  plus: 16,
+  trash: 24,
 };
 
 /**
@@ -144,6 +161,49 @@ const NATURAL: Record<IconName, number> = {
         >
           <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
           <circle cx="12" cy="12" r="3" />
+        </svg>
+      }
+      @case ('tag') {
+        <svg
+          [attr.viewBox]="viewBox()"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          [attr.width]="px()"
+          [attr.height]="px()"
+        >
+          <path
+            d="M2 2h6.59a1 1 0 0 1 .7.29l5.42 5.42a1 1 0 0 1 0 1.41l-5.42 5.42a1 1 0 0 1-1.41 0L2 9.71A1 1 0 0 1 2 8.29V2z"
+          />
+        </svg>
+      }
+      @case ('plus') {
+        <svg
+          [attr.viewBox]="viewBox()"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          [attr.width]="px()"
+          [attr.height]="px()"
+        >
+          <path d="M8 3v10M3 8h10" />
+        </svg>
+      }
+      @case ('trash') {
+        <svg
+          [attr.viewBox]="viewBox()"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          [attr.width]="px()"
+          [attr.height]="px()"
+        >
+          <path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14" />
         </svg>
       }
     }

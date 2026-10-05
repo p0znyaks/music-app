@@ -14,7 +14,13 @@
   max-width: var(--page-max-width);
 }
 
+/* Full-viewport layout used by the sign-in and sign-up screens.
+   `.page` caps the width at --page-max-width so that content columns stay
+   readable; that cap also left-aligns the box, which made these screens
+   centre the card inside a 720px column instead of the viewport. Resetting the
+   cap here is what actually centres them. */
 .page--full {
+  max-width: none;
   min-height: 100vh;
   display: flex;
   align-items: center;

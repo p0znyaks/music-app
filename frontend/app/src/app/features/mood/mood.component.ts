@@ -3,6 +3,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { ApiService } from '../../core/services/api.service';
 import { PlayerService, type PlayerTrack } from '../../core/services/player.service';
 import { formatDurationCompact, normalizeDurationSeconds } from '../../shared/utils/duration.util';
+import { toPlayerTracks } from '../../shared/utils/player-track.util';
 import { TagsService, type TagSort } from '../../core/services/tags.service';
 import { AppTrack } from '../../shared/models/track.model';
 import { TrackCardComponent } from '../../shared/components/track-card/track-card.component';
@@ -122,109 +123,7 @@ const MAX_SELECTED_TAGS = 4;
       }
     </div>
   `,
-  styles: `
-    .head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 1rem;
-      flex-wrap: wrap;
-    }
-    .title {
-      font-size: 1.75rem;
-      font-weight: 700;
-      margin: 0;
-    }
-    .hint {
-      margin: 0.25rem 0 0.75rem;
-      font-size: 0.8rem;
-      opacity: 0.65;
-    }
-
-    .chip[disabled] {
-      opacity: 0.45;
-      cursor: not-allowed;
-    }
-
-    .sort {
-      display: flex;
-      gap: 8px;
-    }
-    .sort-btn {
-      border: 1px solid var(--border);
-      background: var(--bg-card);
-      color: var(--accent-dim);
-      padding: 0.45rem 0.75rem;
-      border-radius: 999px;
-      cursor: pointer;
-      font-size: 0.85rem;
-    }
-    .sort-btn.active {
-      background: var(--accent);
-      color: var(--bg);
-      border-color: var(--accent);
-    }
-    .chips-wrap {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-bottom: 1.25rem;
-    }
-    .chip {
-      padding: 8px 16px;
-      border-radius: 999px;
-      border: 1px solid var(--border);
-      background: var(--bg-hover);
-      color: var(--accent);
-      font-size: 14px;
-      cursor: pointer;
-      transition:
-        background 0.2s ease,
-        color 0.2s ease,
-        border-color 0.2s ease;
-    }
-    .chip:hover {
-      background: var(--bg-card);
-    }
-    .chip.active {
-      background: var(--accent);
-      color: var(--bg);
-      border-color: var(--accent);
-    }
-    .playlist-title {
-      font-size: 1.5rem;
-      font-weight: 600;
-      margin-bottom: 1rem;
-      color: var(--accent);
-    }
-    .meta-sep {
-      color: var(--accent-dim);
-      opacity: 0.7;
-    }
-    .action-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.65rem;
-      margin-bottom: 1.5rem;
-      align-items: center;
-    }
-    .btn:hover:not(:disabled) {
-      border-color: var(--accent-dim);
-    }
-    .btn svg {
-      width: 16px;
-      height: 16px;
-    }
-    .btn:active:not(:disabled) {
-      transform: scale(0.97);
-    }
-    .list {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-  `,
+  styleUrl: './mood.component.css',
 })
 export class MoodComponent {
   private readonly api = inject(ApiService);
@@ -241,13 +140,7 @@ export class MoodComponent {
   readonly loadingPlaylist = signal(false);
 
   readonly queueTracks = computed<PlayerTrack[]>(() =>
-    (this.playlist()?.tracks ?? []).map((track) => ({
-      trackId: track.trackId,
-      title: track.title,
-      artist: track.artist,
-      thumbnailUrl: track.thumbnailUrl ?? undefined,
-      duration: normalizeDurationSeconds(track.duration) ?? undefined,
-    })),
+    toPlayerTracks(this.playlist()?.tracks ?? []),
   );
   readonly trackCountLabel = computed(
     () => `${this.queueTracks().length} ${this.settings.t('tracksSuffix')}`,

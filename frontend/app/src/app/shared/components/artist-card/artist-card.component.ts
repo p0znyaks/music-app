@@ -1,11 +1,12 @@
 import { CommonModule } from '@angular/common';
-import { Component, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import type { YtmArtistCard } from '../../../features/search/search.model';
 
 @Component({
   selector: 'app-artist-card',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [CommonModule, RouterLink],
   template: `
     <a
@@ -34,82 +35,7 @@ import type { YtmArtistCard } from '../../../features/search/search.model';
       </div>
     </a>
   `,
-  styles: `
-    :host {
-      display: block;
-    }
-    a.row-card {
-      text-decoration: none;
-      color: inherit;
-    }
-    .row-card {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      min-height: 64px;
-      padding: 0 12px;
-      border: 1px solid var(--border);
-      background: var(--bg-card);
-      border-radius: 10px;
-      transition: background 0.2s ease;
-    }
-    .row-card:hover {
-      background: var(--bg-hover);
-    }
-    .row-thumb {
-      flex-shrink: 0;
-      width: 48px;
-      height: 48px;
-      overflow: hidden;
-    }
-    .row-thumb-round {
-      border-radius: 50%;
-    }
-    .row-thumb-round img {
-      display: block;
-      width: 48px;
-      height: 48px;
-      object-fit: cover;
-      border-radius: 50%;
-    }
-    .row-artist-avatar {
-      flex-shrink: 0;
-      width: 48px;
-      height: 48px;
-      border-radius: 50%;
-      background: var(--border);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--accent-dim);
-    }
-    .row-info {
-      flex: 1;
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      justify-content: center;
-    }
-    .row-title {
-      font-size: 14px;
-      font-weight: 500;
-      color: var(--accent);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .row-sub {
-      font-size: 12px;
-      color: var(--accent-dim);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .tap:active {
-      transform: scale(0.992);
-    }
-  `,
+  styleUrl: './artist-card.component.css',
 })
 export class ArtistCardComponent {
   readonly artist = input.required<YtmArtistCard>();
